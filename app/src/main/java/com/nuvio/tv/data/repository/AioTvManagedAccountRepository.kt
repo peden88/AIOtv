@@ -55,7 +55,14 @@ class AioTvManagedAccountRepository @Inject constructor(
                     body?.error?.message ?: "Pairing request failed (HTTP ${response.code()})"
                 )
             }
-            body.data
+
+            // The backend may have an unrelated bootstrap/base URL configured.
+            // AIOtv's QR must always return to the exact deployment origin this
+            // APK is paired with, otherwise Pocket ID approval could open the
+            // wrong host despite the device API itself being reachable.
+            body.data.copy(
+                verificationUri = "$baseUrl/api/v1/auth/device/verify?user_code=${body.data.userCode}"
+            )
         }
     }
 
