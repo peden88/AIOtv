@@ -83,14 +83,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          APK='app/build/outputs/apk/full/debug/app-full-universal-debug.apk'
+          SOURCE_APK='app/build/outputs/apk/full/debug/app-full-universal-debug.apk'
+          RELEASE_APK='AIOtv-test.apk'
           TAG='aiotv-test'
 
+          cp "$SOURCE_APK" "$RELEASE_APK"
+
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$APK#AIOtv-test.apk" --clobber
+            gh release upload "$TAG" "$RELEASE_APK" --clobber
           else
             gh release create "$TAG" \
-              "$APK#AIOtv-test.apk" \
+              "$RELEASE_APK" \
               --target "$HEAD_SHA" \
               --title 'AIOtv Test Build' \
               --notes 'Latest installable AIOtv test APK. This asset is replaced on each successful test build.' \
