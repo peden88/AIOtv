@@ -5,11 +5,17 @@ package com.nuvio.tv.core.aio
  *
  * These are deliberately separate from Nuvio's normal user/profile capability
  * model. AIOtv treats the backend account configuration as authoritative for
- * addons, while device-local playback preferences and catalog presentation
- * remain user controlled.
+ * identity and addons, while device-local playback preferences and catalog
+ * presentation remain user controlled.
  */
 object AioProductPolicy {
     const val FIXED_APPEARANCE = true
+
+    // Pocket ID + the administrator-owned AIOStreams binding is the only
+    // account model exposed by AIOtv. Upstream Nuvio account/profile controls
+    // remain internal implementation details and are not user-manageable.
+    const val USER_CAN_ACCESS_NUVIO_ACCOUNT = false
+    const val USER_CAN_MANAGE_NUVIO_PROFILES = false
 
     const val ADMIN_MANAGED_ADDONS = true
     const val USER_CAN_INSTALL_ADDONS = false
