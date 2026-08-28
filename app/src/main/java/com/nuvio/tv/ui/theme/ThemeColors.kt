@@ -26,6 +26,44 @@ data class ThemeColorPalette(
 )
 
 object ThemeColors {
+    /**
+     * AIOtv's single product palette, derived from the AIOStreams configuration UI.
+     *
+     * AIOStreams uses #070707 as its dark background with the #6152DF brand purple
+     * and related violet shades for interactive/focus states. Keeping these values in
+     * one palette lets us retain Nuvio's mature TV component system while presenting a
+     * consistent AIO visual identity.
+     */
+    val AioStreams = ThemeColorPalette(
+        secondary = Color(0xFF6152DF),
+        secondaryVariant = Color(0xFF5243CB),
+        onSecondary = NuvioPrimitives.white,
+        onSecondaryVariant = NuvioPrimitives.white,
+        accentGradient = listOf(
+            Color(0xFF9F92FF),
+            Color(0xFF6152DF),
+            Color(0xFF3F2EB2)
+        ),
+        focusRing = Color(0xFFD4D0FF),
+        focusRingGradient = listOf(
+            Color(0xFFD4D0FF),
+            Color(0xFF9F92FF),
+            Color(0xFF6152DF)
+        ),
+        focusBackground = Color(0xFF231C6B),
+        background = Color(0xFF070707),
+        backgroundElevated = Color(0xFF101010),
+        backgroundCard = Color(0xFF1C1C1C),
+        surface = Color(0xFF101010),
+        surfaceVariant = Color(0xFF1C1C1C),
+        panel = Color(0xFF101010),
+        overlay = Color(0xE6000000),
+        field = Color(0xFF1C1C1C),
+        menu = Color(0xFF101010),
+        modal = Color(0xFF101010),
+        playerOverlay = Color(0xCC000000)
+    )
+
     val Crimson = ThemeColorPalette(
         secondary = NuvioPrimitives.red500,
         secondaryVariant = NuvioPrimitives.red600,
