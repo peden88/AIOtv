@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: pr-full-debug-build-${{ github.event.pull_request.number || github.ref }}
@@ -76,3 +76,23 @@ jobs:
           path: app/build/outputs/apk/full/debug/app-full-universal-debug.apk
           if-no-files-found: error
           retention-days: 7
+
+      - name: Publish latest AIOtv test APK
+        if: github.repository == 'peden88/AIOtv' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          APK='app/build/outputs/apk/full/debug/app-full-universal-debug.apk'
+          TAG='aiotv-test'
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$APK#AIOtv-test.apk" --clobber
+          else
+            gh release create "$TAG" \
+              "$APK#AIOtv-test.apk" \
+              --target "$HEAD_SHA" \
+              --title 'AIOtv Test Build' \
+              --notes 'Latest installable AIOtv test APK. This asset is replaced on each successful test build.' \
+              --prerelease
+          fi
