@@ -1,0 +1,28 @@
+name: Repair AIOtv Test Release
+
+on:
+  push:
+    branches:
+      - feature/aio-device-auth
+    paths:
+      - .github/workflows/repair-aiotv-test-release.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish stable AIOtv-test.apk asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download aiotv-test \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern 'app-full-universal-debug.apk' \
+            --clobber
+          cp app-full-universal-debug.apk AIOtv-test.apk
+          gh release upload aiotv-test AIOtv-test.apk \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
