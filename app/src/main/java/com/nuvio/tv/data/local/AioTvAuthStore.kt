@@ -82,10 +82,13 @@ class AioTvAuthStore @Inject constructor(
 
     @Synchronized
     fun saveBootstrapMetadata(etag: String?, policyRevision: Int) {
-        prefs.edit().apply {
-            if (etag.isNullOrBlank()) remove(BOOTSTRAP_ETAG) else putString(BOOTSTRAP_ETAG, etag)
-            putInt(POLICY_REVISION, policyRevision)
-        }.apply()
+        val editor = prefs.edit()
+        if (etag.isNullOrBlank()) {
+            editor.remove(BOOTSTRAP_ETAG)
+        } else {
+            editor.putString(BOOTSTRAP_ETAG, etag)
+        }
+        editor.putInt(POLICY_REVISION, policyRevision).apply()
     }
 
     @Synchronized
