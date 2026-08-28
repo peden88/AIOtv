@@ -23,17 +23,17 @@ data class NuvioExtendedColors(
 )
 
 val LocalNuvioColors = staticCompositionLocalOf {
-    NuvioColorScheme(ThemeColors.Ocean)
+    NuvioColorScheme(ThemeColors.AioStreams)
 }
 
 val LocalNuvioExtendedColors = staticCompositionLocalOf {
     NuvioExtendedColors(
-        backgroundElevated = Color(0xFF1A1A1A),
-        backgroundCard = Color(0xFF242424),
+        backgroundElevated = ThemeColors.AioStreams.backgroundElevated,
+        backgroundCard = ThemeColors.AioStreams.backgroundCard,
         textSecondary = Color(0xFFB3B3B3),
         textTertiary = Color(0xFF808080),
-        focusRing = ThemeColors.Ocean.focusRing,
-        focusBackground = ThemeColors.Ocean.focusBackground,
+        focusRing = ThemeColors.AioStreams.focusRing,
+        focusBackground = ThemeColors.AioStreams.focusBackground,
         rating = Color(0xFFFFD700)
     )
 }
@@ -45,11 +45,12 @@ val LocalAppTheme = staticCompositionLocalOf { AppTheme.WHITE }
 val LocalSettingsUiStyle = staticCompositionLocalOf { SettingsUiStyle.CLASSIC }
 
 val LocalNuvioFocusRingStyle = staticCompositionLocalOf {
-    createFocusRingStyle(ThemeColors.Ocean)
+    createFocusRingStyle(ThemeColors.AioStreams)
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
+@Suppress("UNUSED_PARAMETER")
 fun NuvioTheme(
     appTheme: AppTheme = AppTheme.WHITE,
     appFont: AppFont = AppFont.INTER,
@@ -58,19 +59,22 @@ fun NuvioTheme(
     settingsUiStyle: SettingsUiStyle = SettingsUiStyle.CLASSIC,
     content: @Composable () -> Unit
 ) {
-    val palette = ThemeColors.getColorPalette(appTheme)
+    // AIOtv is a managed product rather than a themeable Nuvio distribution.
+    // Preserve NuvioTheme's public signature so upstream call-sites remain easy
+    // to merge, but deliberately ignore persisted visual customisation values.
+    val palette = ThemeColors.AioStreams
     val focusRingStyle = createFocusRingStyle(palette)
     val colorScheme = NuvioColorScheme(
         palette = palette,
-        amoledMode = amoledMode,
-        amoledSurfacesMode = amoledSurfacesMode
+        amoledMode = false,
+        amoledSurfacesMode = false
     )
-    val typography = buildNuvioTypography(getFontFamily(appFont))
+    val typography = buildNuvioTypography(getFontFamily(AppFont.INTER))
     val textStyles = buildNuvioTextStyles(typography)
 
     val materialColorScheme = darkColorScheme(
-        primary = colorScheme.Primary,
-        onPrimary = colorScheme.OnPrimary,
+        primary = colorScheme.Secondary,
+        onPrimary = colorScheme.OnSecondary,
         secondary = colorScheme.Secondary,
         onSecondary = colorScheme.OnSecondary,
         background = colorScheme.Background,
@@ -96,8 +100,10 @@ fun NuvioTheme(
         LocalNuvioColors provides colorScheme,
         LocalNuvioExtendedColors provides extendedColors,
         LocalNuvioTextStyles provides textStyles,
-        LocalAppTheme provides appTheme,
-        LocalSettingsUiStyle provides settingsUiStyle,
+        // Keep branding and settings presentation deterministic even if a user
+        // upgraded from Nuvio with older theme/style values still in DataStore.
+        LocalAppTheme provides AppTheme.WHITE,
+        LocalSettingsUiStyle provides SettingsUiStyle.CLASSIC,
         LocalNuvioFocusRingStyle provides focusRingStyle
     ) {
         MaterialTheme(
