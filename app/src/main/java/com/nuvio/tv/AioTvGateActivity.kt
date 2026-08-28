@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,7 +29,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Button
-import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.SurfaceDefaults
@@ -73,7 +73,6 @@ class AioTvGateActivity : ComponentActivity() {
     }
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun AioTvGateScreen(
     state: AioTvGateState,
@@ -141,20 +140,18 @@ private fun PairingContent(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center
     ) {
-        Surface(
-            shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(
-                RoundedCornerShape(24.dp)
-            ),
-            colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
-                containerColor = NuvioTheme.colors.BackgroundCard
-            )
+        Box(
+            modifier = Modifier
+                .background(
+                    color = NuvioTheme.colors.BackgroundCard,
+                    shape = RoundedCornerShape(24.dp)
+                )
+                .padding(18.dp)
         ) {
             Image(
                 bitmap = qr,
                 contentDescription = "AIOtv pairing QR code",
-                modifier = Modifier
-                    .padding(18.dp)
-                    .size(310.dp)
+                modifier = Modifier.size(310.dp)
             )
         }
 
