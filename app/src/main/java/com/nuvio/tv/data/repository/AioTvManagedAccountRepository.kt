@@ -1,6 +1,6 @@
 package com.nuvio.tv.data.repository
 
-import com.nuvio.tv.BuildConfig
+import com.nuvio.tv.core.aio.AioTvServerConfig
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.data.local.AioTvAuthStore
 import com.nuvio.tv.data.remote.api.AioTvApi
@@ -36,7 +36,7 @@ class AioTvManagedAccountRepository @Inject constructor(
     }
 
     private val baseUrl: String
-        get() = BuildConfig.AIOSTREAMS_BASE_URL.trim().trimEnd('/')
+        get() = AioTvServerConfig.BASE_URL.trim().trimEnd('/')
 
     val isServerConfigured: Boolean
         get() = baseUrl.startsWith("https://") || baseUrl.startsWith("http://")
@@ -44,7 +44,7 @@ class AioTvManagedAccountRepository @Inject constructor(
     suspend fun startPairing(): Result<AioTvDeviceStartData> = withContext(Dispatchers.IO) {
         if (!isServerConfigured) {
             return@withContext Result.failure(
-                IllegalStateException("AIOSTREAMS_BASE_URL is not configured in this AIOtv build")
+                IllegalStateException("AIOtv backend URL is not configured in this build")
             )
         }
         runCatching {
