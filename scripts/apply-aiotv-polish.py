@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import base64
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -36,16 +35,6 @@ def remove_between(rel, start, end):
     text = text[:i] + '        // AIOtv managed build: P2P settings are intentionally hidden.\n\n' + text[j:]
     write(rel, text)
     print(f'AIOtv polish: removed P2P settings UI from {rel}')
-
-
-def decode_asset(source_rel, dest_rels):
-    encoded = ''.join(read(source_rel).split())
-    data = base64.b64decode(encoded)
-    for rel in dest_rels:
-        p = ROOT / rel
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_bytes(data)
-        print(f'AIOtv polish: wrote brand asset {rel}')
 
 # Launcher / TV dashboard branding.
 replace_required(
@@ -111,25 +100,5 @@ for kt in (ROOT / 'app/src/main/java').rglob('*.kt'):
     if updated != text:
         kt.write_text(updated, encoding='utf-8')
         print(f'AIOtv polish: rebranded literals in {kt.relative_to(ROOT)}')
-
-# Decode the approved AIOtv icon/wordmark into full-flavour resource overrides.
-decode_asset('branding/aiotv_app_icon.webp.b64', [
-    'app/src/full/res/drawable-nodpi/aiotv_app_icon.webp',
-    'app/src/full/res/drawable-nodpi/app_logo_mark.webp',
-    'app/src/full/res/drawable-nodpi/ic_launcher.webp',
-])
-decode_asset('branding/aiotv_wordmark.webp.b64', [
-    'app/src/full/res/drawable-nodpi/app_logo_wordmark.webp',
-    'app/src/full/res/drawable-nodpi/app_logo_wordmark_arctic_blue.webp',
-    'app/src/full/res/drawable-nodpi/app_logo_wordmark_gold.webp',
-    'app/src/full/res/drawable-nodpi/app_logo_wordmark_graphite.webp',
-    'app/src/full/res/drawable-nodpi/app_logo_wordmark_jade.webp',
-    'app/src/full/res/drawable-nodpi/app_logo_wordmark_rose_gold.webp',
-    'app/src/full/res/drawable-nodpi/nuvio_text.webp',
-])
-decode_asset('branding/aiotv_tv_banner.webp.b64', [
-    'app/src/full/res/drawable-nodpi/aiotv_tv_banner.webp',
-    'app/src/full/res/drawable-nodpi/tv_banner.webp',
-])
 
 print('AIOtv polish: complete')
