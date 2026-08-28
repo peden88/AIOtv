@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -30,7 +29,6 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.SurfaceDefaults
 import androidx.tv.material3.Text
-import com.nuvio.tv.core.server.PendingAddonChange
 import com.nuvio.tv.ui.theme.NuvioTheme
 
 /**
@@ -141,10 +139,20 @@ internal fun QrCodeOverlay(
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 internal fun ConfirmAddonChangesDialog(
-    pendingChange: PendingAddonChange,
+    pendingChange: PendingChangeInfo,
     onConfirm: () -> Unit,
     onReject: () -> Unit
 ) {
+    val changeSummary = buildList {
+        if (pendingChange.addedUrls.isNotEmpty()) add("${pendingChange.addedUrls.size} addon(s) added")
+        if (pendingChange.removedUrls.isNotEmpty()) add("${pendingChange.removedUrls.size} addon(s) removed")
+        if (pendingChange.catalogsReordered) add("catalog order changed")
+        if (pendingChange.disabledCatalogNames.isNotEmpty()) add("catalog visibility changed")
+        if (pendingChange.enabledCatalogNames.isNotEmpty()) add("catalog visibility changed")
+        if (pendingChange.collectionsChanged) add("collections changed")
+        if (pendingChange.proposedFollowAddonsOrder != null) add("catalog ordering mode changed")
+    }.distinct().joinToString(", ").ifBlank { "configuration changes" }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -168,7 +176,7 @@ internal fun ConfirmAddonChangesDialog(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "A connected configuration page requested changes affecting ${pendingChange.proposedUrls.size} addon${if (pendingChange.proposedUrls.size == 1) "" else "s"}. Approve only if you initiated this request.",
+                    text = "A connected configuration page requested $changeSummary. Approve only if you initiated this request.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = NuvioTheme.colors.TextSecondary
                 )
@@ -178,6 +186,7 @@ internal fun ConfirmAddonChangesDialog(
                 ) {
                     Button(
                         onClick = onReject,
+                        enabled = !pendingChange.isApplying,
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.colors(
                             containerColor = NuvioTheme.colors.BackgroundElevated,
@@ -190,6 +199,7 @@ internal fun ConfirmAddonChangesDialog(
                     }
                     Button(
                         onClick = onConfirm,
+                        enabled = !pendingChange.isApplying,
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.colors(
                             containerColor = NuvioTheme.colors.Secondary,
@@ -198,7 +208,7 @@ internal fun ConfirmAddonChangesDialog(
                             focusedContentColor = NuvioTheme.colors.OnSecondary
                         )
                     ) {
-                        Text("Confirm")
+                        Text(if (pendingChange.isApplying) "Applying…" else "Confirm")
                     }
                 }
             }
