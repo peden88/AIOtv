@@ -58,9 +58,11 @@ fun AddonManagerScreen(
     showBuiltInHeader: Boolean = true,
     onBackPress: () -> Unit = {},
     onNavigateToCatalogOrder: () -> Unit = {},
-    onNavigateToCollections: () -> Unit = {}
+    onNavigateToCollections: () -> Unit = {},
+    refreshViewModel: AioTvPolicyRefreshViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val refreshState by refreshViewModel.state.collectAsState()
 
     BackHandler { onBackPress() }
 
@@ -119,7 +121,8 @@ fun AddonManagerScreen(
                     }
 
                     Button(
-                        onClick = viewModel::requestAddonSyncNow,
+                        onClick = refreshViewModel::refresh,
+                        enabled = !refreshState.isRefreshing,
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.colors(
                             containerColor = NuvioTheme.colors.BackgroundCard,
@@ -136,10 +139,20 @@ fun AddonManagerScreen(
                     ) {
                         Icon(Icons.Default.Refresh, contentDescription = null)
                         Text(
-                            text = "Refresh assigned addons",
+                            text = if (refreshState.isRefreshing) "Refreshing…" else "Refresh assigned addons",
                             modifier = Modifier.padding(start = NuvioTheme.spacing.sm)
                         )
                     }
+                }
+            }
+
+            refreshState.message?.let { message ->
+                item {
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (refreshState.isError) NuvioTheme.colors.Error else NuvioTheme.colors.Success
+                    )
                 }
             }
 
