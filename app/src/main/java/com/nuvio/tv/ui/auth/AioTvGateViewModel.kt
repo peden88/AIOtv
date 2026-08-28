@@ -2,6 +2,7 @@ package com.nuvio.tv.ui.auth
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nuvio.tv.data.local.AppOnboardingDataStore
 import com.nuvio.tv.data.repository.AioTvManagedAccountRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -32,7 +33,8 @@ sealed interface AioTvGateState {
 
 @HiltViewModel
 class AioTvGateViewModel @Inject constructor(
-    private val repository: AioTvManagedAccountRepository
+    private val repository: AioTvManagedAccountRepository,
+    private val appOnboardingDataStore: AppOnboardingDataStore
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<AioTvGateState>(AioTvGateState.Loading)
@@ -58,9 +60,7 @@ class AioTvGateViewModel @Inject constructor(
         authJob = viewModelScope.launch {
             _state.value = AioTvGateState.Loading
             when (val result = repository.restoreAndBootstrap()) {
-                is AioTvManagedAccountRepository.BootstrapResult.Ready -> {
-                    _state.value = AioTvGateState.Ready
-                }
+                is AioTvManagedAccountRepository.BootstrapResult.Ready -> markReady()
                 AioTvManagedAccountRepository.BootstrapResult.NoSession,
                 AioTvManagedAccountRepository.BootstrapResult.Revoked -> startPairing()
                 is AioTvManagedAccountRepository.BootstrapResult.Failed -> {
@@ -102,9 +102,7 @@ class AioTvGateViewModel @Inject constructor(
                 is AioTvManagedAccountRepository.TokenPollResult.Approved -> {
                     _state.value = AioTvGateState.Loading
                     when (val bootstrap = repository.bootstrapAndReconcile(poll.session)) {
-                        is AioTvManagedAccountRepository.BootstrapResult.Ready -> {
-                            _state.value = AioTvGateState.Ready
-                        }
+                        is AioTvManagedAccountRepository.BootstrapResult.Ready -> markReady()
                         AioTvManagedAccountRepository.BootstrapResult.Revoked,
                         AioTvManagedAccountRepository.BootstrapResult.NoSession -> {
                             startPairing()
@@ -131,5 +129,15 @@ class AioTvGateViewModel @Inject constructor(
         _state.value = AioTvGateState.Error(
             "This pairing code expired. Request a new code to continue."
         )
+    }
+
+    /**
+     * AIOtv owns authentication in this distribution. Mark Nuvio's legacy
+     * first-launch account QR as completed before entering MainActivity so the
+     * user is never asked to sign into a second account system after Pocket ID.
+     */
+    private suspend fun markReady() {
+        appOnboardingDataStore.setHasSeenAuthQrOnFirstLaunch(true)
+        _state.value = AioTvGateState.Ready
     }
 }
