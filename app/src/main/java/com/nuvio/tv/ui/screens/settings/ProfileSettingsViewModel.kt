@@ -2,16 +2,14 @@ package com.nuvio.tv.ui.screens.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nuvio.tv.core.aio.AioProductPolicy
 import com.nuvio.tv.core.profile.ProfileManager
 import com.nuvio.tv.core.sync.ProfileSyncService
 import com.nuvio.tv.domain.model.UserProfile
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -23,12 +21,18 @@ class ProfileSettingsViewModel @Inject constructor(
 
     val profiles: StateFlow<List<UserProfile>> = profileManager.profiles
 
-    val isPrimaryProfileActive: StateFlow<Boolean> = profileManager.activeProfileId
-        .map { it == 1 }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+    /**
+     * AIOtv uses one administrator-managed Pocket ID identity. Keep upstream
+     * Nuvio account/profile management sections hidden while retaining the
+     * latest ProfileManager implementation underneath.
+     */
+    val isPrimaryProfileActive: StateFlow<Boolean> = MutableStateFlow(
+        AioProductPolicy.USER_CAN_ACCESS_NUVIO_ACCOUNT ||
+            AioProductPolicy.USER_CAN_MANAGE_NUVIO_PROFILES
+    )
 
     val canAddProfile: Boolean
-        get() = profileManager.canCreateProfile
+        get() = AioProductPolicy.USER_CAN_MANAGE_NUVIO_PROFILES && profileManager.canCreateProfile
 
     private val _isCreating = MutableStateFlow(false)
     val isCreating: StateFlow<Boolean> = _isCreating.asStateFlow()
@@ -40,7 +44,7 @@ class ProfileSettingsViewModel @Inject constructor(
         usesPrimaryPlugins: Boolean,
         avatarId: String? = null
     ) {
-        if (_isCreating.value) return
+        if (!AioProductPolicy.USER_CAN_MANAGE_NUVIO_PROFILES || _isCreating.value) return
         viewModelScope.launch {
             _isCreating.value = true
             val newProfile = profileManager.createProfile(
@@ -64,6 +68,7 @@ class ProfileSettingsViewModel @Inject constructor(
     }
 
     fun updateProfile(profile: UserProfile) {
+        if (!AioProductPolicy.USER_CAN_MANAGE_NUVIO_PROFILES) return
         viewModelScope.launch {
             profileManager.updateProfile(profile)
             profileSyncService.pushToRemote()
@@ -71,6 +76,7 @@ class ProfileSettingsViewModel @Inject constructor(
     }
 
     fun deleteProfile(id: Int) {
+        if (!AioProductPolicy.USER_CAN_MANAGE_NUVIO_PROFILES) return
         viewModelScope.launch {
             profileManager.deleteProfile(id)
             profileSyncService.deleteProfileData(id)

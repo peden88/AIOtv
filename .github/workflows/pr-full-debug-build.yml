@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: pr-full-debug-build-${{ github.event.pull_request.number || github.ref }}
@@ -46,25 +46,19 @@ jobs:
             touch local.dev.properties
           fi
 
-      - name: Prepare CI signing config
+      - name: Prepare stable AIOtv test signing config
         run: |
-          keytool -genkeypair \
-            -v \
-            -keystore "$RUNNER_TEMP/ci-debug.jks" \
-            -storepass android \
-            -alias androiddebugkey \
-            -keypass android \
-            -dname "CN=Android Debug,O=Android,C=US" \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000
+          base64 --decode .github/test-signing/aiotv-test.jks.b64 > "$RUNNER_TEMP/aiotv-test.jks"
 
           {
-            echo "NUVIO_RELEASE_STORE_FILE=$RUNNER_TEMP/ci-debug.jks"
-            echo "NUVIO_RELEASE_KEY_ALIAS=androiddebugkey"
-            echo "NUVIO_RELEASE_KEY_PASSWORD=android"
-            echo "NUVIO_RELEASE_STORE_PASSWORD=android"
+            echo "NUVIO_RELEASE_STORE_FILE=$RUNNER_TEMP/aiotv-test.jks"
+            echo "NUVIO_RELEASE_KEY_ALIAS=aiotvtest"
+            echo "NUVIO_RELEASE_KEY_PASSWORD=aiotvtest"
+            echo "NUVIO_RELEASE_STORE_PASSWORD=aiotvtest"
           } >> "$GITHUB_ENV"
+
+      - name: Apply AIOtv product polish
+        run: python3 scripts/apply-aiotv-polish.py
 
       - name: Test updater and build fullDebug APK
         run: ./gradlew :app:testFullDebugUnitTest --tests 'com.nuvio.tv.updater.*' :app:assembleFullDebug --stacktrace
@@ -72,7 +66,30 @@ jobs:
       - name: Upload fullDebug APK
         uses: actions/upload-artifact@v4
         with:
-          name: nuvio-full-debug-pr-${{ github.event.pull_request.number || github.run_number }}
+          name: aiotv-full-debug-pr-${{ github.event.pull_request.number || github.run_number }}
           path: app/build/outputs/apk/full/debug/app-full-universal-debug.apk
           if-no-files-found: error
           retention-days: 7
+
+      - name: Publish latest AIOtv test APK
+        if: github.repository == 'peden88/AIOtv' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          SOURCE_APK='app/build/outputs/apk/full/debug/app-full-universal-debug.apk'
+          RELEASE_APK='AIOtv-test.apk'
+          TAG='aiotv-test'
+
+          cp "$SOURCE_APK" "$RELEASE_APK"
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$RELEASE_APK" --clobber
+          else
+            gh release create "$TAG" \
+              "$RELEASE_APK" \
+              --target "$HEAD_SHA" \
+              --title 'AIOtv Test Build' \
+              --notes 'Latest installable AIOtv test APK. This asset is replaced on each successful test build.' \
+              --prerelease
+          fi

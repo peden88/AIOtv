@@ -2,6 +2,7 @@ package com.nuvio.tv.core.deeplink
 
 import android.content.Context
 import com.nuvio.tv.R
+import com.nuvio.tv.core.aio.AioProductPolicy
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.domain.repository.AddonRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -12,6 +13,12 @@ class DeepLinkHandler @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     suspend fun installAddon(manifestUrl: String): DeepLinkInstallResult {
+        if (!AioProductPolicy.USER_CAN_INSTALL_ADDONS) {
+            return DeepLinkInstallResult.Error(
+                "Addon management is controlled by your AIOtv administrator."
+            )
+        }
+
         return when (val result = addonRepository.fetchAddon(manifestUrl)) {
             is NetworkResult.Success -> {
                 addonRepository.addAddon(manifestUrl)

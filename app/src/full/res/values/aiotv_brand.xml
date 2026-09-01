@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AIOtv</string>
+
+    <item name="app_logo_mark" type="drawable">@drawable/aiotv_app_icon</item>
+    <item name="ic_launcher" type="drawable">@drawable/aiotv_app_icon</item>
+    <item name="app_logo_wordmark" type="drawable">@drawable/aiotv_wordmark</item>
+    <item name="app_logo_wordmark_arctic_blue" type="drawable">@drawable/aiotv_wordmark</item>
+    <item name="app_logo_wordmark_gold" type="drawable">@drawable/aiotv_wordmark</item>
+    <item name="app_logo_wordmark_graphite" type="drawable">@drawable/aiotv_wordmark</item>
+    <item name="app_logo_wordmark_jade" type="drawable">@drawable/aiotv_wordmark</item>
+    <item name="app_logo_wordmark_rose_gold" type="drawable">@drawable/aiotv_wordmark</item>
+    <item name="nuvio_text" type="drawable">@drawable/aiotv_wordmark</item>
+    <item name="tv_banner" type="drawable">@drawable/aiotv_tv_banner</item>
+</resources>
