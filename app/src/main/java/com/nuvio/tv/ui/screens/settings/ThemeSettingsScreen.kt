@@ -33,9 +33,8 @@ import java.util.Locale
 
 /**
  * AIOtv uses a single administrator-defined visual identity. Theme, AMOLED,
- * settings-style and font controls from upstream Nuvio are intentionally not
- * exposed here. Language remains a user preference because it changes content
- * localisation rather than product appearance.
+ * settings-style, launcher-artwork and font controls from upstream Nuvio are
+ * intentionally not exposed. Language remains user-configurable.
  */
 @Composable
 fun ThemeSettingsScreen(
@@ -66,7 +65,7 @@ fun ThemeSettingsContent(
     val supportedLocales = remember(systemLanguage) {
         val tags = listOf(
             "en", "ru", "ar", "bg", "bs", "da", "de", "el", "es", "es-419", "hu", "fr", "in", "it",
-            "no", "pl", "pt-PT", "pt-BR", "tr", "uk", "cs", "sk", "sl", "sq", "sv", "ta", "ro", "ja",
+            "no", "pl", "pt-PT", "pt-BR", "tr", "uk", "cs", "sk", "sl", "sq", "sr-Latn", "sv", "ta", "ro", "ja",
             "nl", "vi", "hi", "lt", "he", "zh-CN", "zh-TW"
         )
         listOf(null to systemLanguage) + tags.map { tag ->

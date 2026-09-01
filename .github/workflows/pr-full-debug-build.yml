@@ -60,8 +60,8 @@ jobs:
       - name: Apply AIOtv product polish
         run: python3 scripts/apply-aiotv-polish.py
 
-      - name: Build fullDebug APK
-        run: ./gradlew :app:assembleFullDebug --stacktrace
+      - name: Test updater and build fullDebug APK
+        run: ./gradlew :app:testFullDebugUnitTest --tests 'com.nuvio.tv.updater.*' :app:assembleFullDebug --stacktrace
 
       - name: Upload fullDebug APK
         uses: actions/upload-artifact@v4

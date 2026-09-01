@@ -22,10 +22,9 @@ class ProfileSettingsViewModel @Inject constructor(
     val profiles: StateFlow<List<UserProfile>> = profileManager.profiles
 
     /**
-     * SettingsScreen shows both upstream Account and Profiles only when this is
-     * true. AIOtv has a single administrator-managed Pocket ID identity model,
-     * so keep those Nuvio management sections hidden without modifying the much
-     * larger upstream SettingsScreen.
+     * AIOtv uses one administrator-managed Pocket ID identity. Keep upstream
+     * Nuvio account/profile management sections hidden while retaining the
+     * latest ProfileManager implementation underneath.
      */
     val isPrimaryProfileActive: StateFlow<Boolean> = MutableStateFlow(
         AioProductPolicy.USER_CAN_ACCESS_NUVIO_ACCOUNT ||
@@ -48,16 +47,13 @@ class ProfileSettingsViewModel @Inject constructor(
         if (!AioProductPolicy.USER_CAN_MANAGE_NUVIO_PROFILES || _isCreating.value) return
         viewModelScope.launch {
             _isCreating.value = true
-            val existingIds = profileManager.profiles.value.map { it.id }.toSet()
-            val success = profileManager.createProfile(
+            val newProfile = profileManager.createProfile(
                 name = name,
                 avatarColorHex = avatarColorHex,
                 avatarId = avatarId
             )
-            if (success) {
-                val profiles = profileManager.profiles.value
-                val newProfile = profiles.firstOrNull { it.id !in existingIds }
-                if (newProfile != null && (usesPrimaryAddons || usesPrimaryPlugins)) {
+            if (newProfile != null) {
+                if (usesPrimaryAddons || usesPrimaryPlugins) {
                     profileManager.updateProfile(
                         newProfile.copy(
                             usesPrimaryAddons = usesPrimaryAddons,
