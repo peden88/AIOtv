@@ -69,7 +69,6 @@ replace_required(
                 onBackPress = { navController.popBackStack() },
                 onNavigateToAppearance = { navController.navigate(Screen.ThemeSettings.route) },
                 onNavigateToLayout = { navController.navigate(Screen.LayoutSettings.route) },
-                onNavigateToAddons = { navController.navigate(Screen.AddonManager.route) },
                 onNavigateToPlayback = { navController.navigate(Screen.PlaybackSettings.route) },
                 onNavigateToTracking = { navController.navigate(Screen.Tracking.route) },
                 onNavigateToAdvanced = { navController.navigate(Screen.AdvancedSettings.route) },

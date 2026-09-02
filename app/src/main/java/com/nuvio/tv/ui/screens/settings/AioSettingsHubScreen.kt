@@ -26,7 +26,6 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sync
-import androidx.compose.material.icons.filled.Tune
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -62,7 +61,6 @@ fun AioSettingsHubScreen(
     onBackPress: () -> Unit,
     onNavigateToAppearance: () -> Unit,
     onNavigateToLayout: () -> Unit,
-    onNavigateToAddons: () -> Unit,
     onNavigateToPlayback: () -> Unit,
     onNavigateToTracking: () -> Unit,
     onNavigateToAdvanced: () -> Unit,
@@ -73,7 +71,6 @@ fun AioSettingsHubScreen(
     val destinations = remember(
         onNavigateToAppearance,
         onNavigateToLayout,
-        onNavigateToAddons,
         onNavigateToPlayback,
         onNavigateToTracking,
         onNavigateToAdvanced,
@@ -82,7 +79,6 @@ fun AioSettingsHubScreen(
         listOf(
             AioSettingsDestination("Language", "Interface language and regional display", Icons.Default.Language, onNavigateToAppearance),
             AioSettingsDestination("Home & layout", "Catalog presentation, posters and home behaviour", Icons.Default.GridView, onNavigateToLayout),
-            AioSettingsDestination("Content", "View the addons and catalogs assigned to this account", Icons.Default.Tune, onNavigateToAddons),
             AioSettingsDestination("Playback", "Player, autoplay, audio, subtitles and skipping", Icons.Default.PlayArrow, onNavigateToPlayback),
             AioSettingsDestination("Tracking", "Watch progress and external tracking providers", Icons.Default.Sync, onNavigateToTracking),
             AioSettingsDestination("Advanced", "Network, diagnostics, cache and device behaviour", Icons.Default.Settings, onNavigateToAdvanced),
