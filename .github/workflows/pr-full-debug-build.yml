@@ -3,7 +3,7 @@ name: PR Full Debug Build
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    branches: [dev]
+    branches: [dev, feature/aio-device-auth]
   workflow_dispatch:
 
 permissions:
@@ -57,8 +57,10 @@ jobs:
             echo "NUVIO_RELEASE_STORE_PASSWORD=aiotvtest"
           } >> "$GITHUB_ENV"
 
-      - name: Apply AIOtv product polish
-        run: python3 scripts/apply-aiotv-polish.py
+      - name: Apply AIOtv product and UI layers
+        run: |
+          python3 scripts/apply-aiotv-polish.py
+          python3 scripts/apply-aiotv-ui-refresh.py
 
       - name: Test updater and build fullDebug APK
         run: ./gradlew :app:testFullDebugUnitTest --tests 'com.nuvio.tv.updater.*' :app:assembleFullDebug --stacktrace
