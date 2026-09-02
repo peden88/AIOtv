@@ -52,8 +52,7 @@ def remove_between(rel, start, end):
     print(f'AIOtv polish: removed P2P settings UI from {rel}')
 
 # Launcher / TV dashboard branding. Accept either pristine upstream resources or
-# an already-branded manifest so the AIOtv UI branch can carry canonical assets
-# directly without making the build-time product layer brittle.
+# an already-branded manifest so UI/branding branches can carry canonical assets.
 replace_or_already(
     'app/src/main/AndroidManifest.xml',
     'android:banner="@mipmap/banner"',
@@ -77,7 +76,6 @@ replace_required(
 # that migration flag is written, users are free to change these values normally.
 player_file = 'app/src/main/java/com/nuvio/tv/data/local/PlayerSettingsDataStore.kt'
 for old, new in [
-    # Data-class defaults.
     ('val useForcedSubtitles: Boolean = false,', 'val useForcedSubtitles: Boolean = true,'),
     ('val showOnlyPreferredLanguages: Boolean = false,', 'val showOnlyPreferredLanguages: Boolean = true,'),
     ('val internalPlayerEngine: InternalPlayerEngine = InternalPlayerEngine.EXOPLAYER,', 'val internalPlayerEngine: InternalPlayerEngine = InternalPlayerEngine.AUTO,'),
@@ -86,9 +84,6 @@ for old, new in [
     ('val streamAutoPlayMode: StreamAutoPlayMode = StreamAutoPlayMode.MANUAL,', 'val streamAutoPlayMode: StreamAutoPlayMode = StreamAutoPlayMode.FIRST_STREAM,'),
     ('val streamAutoPlaySource: StreamAutoPlaySource = StreamAutoPlaySource.ALL_SOURCES,', 'val streamAutoPlaySource: StreamAutoPlaySource = StreamAutoPlaySource.INSTALLED_ADDONS_ONLY,'),
     ('val streamAutoPlayNextEpisodeEnabled: Boolean = false,', 'val streamAutoPlayNextEpisodeEnabled: Boolean = true,'),
-
-    # PlayerSettingsDataStore read-time fallbacks. These are what the UI actually
-    # sees when no preference has yet been persisted.
     ('runCatching { InternalPlayerEngine.valueOf(it) }.getOrDefault(InternalPlayerEngine.EXOPLAYER)', 'runCatching { InternalPlayerEngine.valueOf(it) }.getOrDefault(InternalPlayerEngine.AUTO)'),
     ('} ?: InternalPlayerEngine.EXOPLAYER,', '} ?: InternalPlayerEngine.AUTO,'),
     ('parentalGuideEnabled = prefs[parentalGuideEnabledKey] ?: true,', 'parentalGuideEnabled = prefs[parentalGuideEnabledKey] ?: false,'),
@@ -103,9 +98,6 @@ for old, new in [
 ]:
     replace_required(player_file, old, new)
 
-# Add a versioned one-time migration so an installed pre-defaults test build gets
-# the AIOtv baseline exactly once. This intentionally establishes the product
-# baseline on upgrade; subsequent app starts never overwrite user changes.
 replace_required(
     player_file,
     '    private val migrationTargetBufferSizeReducedDoneKey = booleanPreferencesKey("migration_target_buffer_size_reduced_done")\n',
@@ -138,4 +130,36 @@ replace_required(
     '                val loadControlMigrated = prefs[migrationLoadControlDefaultsAlignedDoneKey] ?: false\n'
 )
 
-# Remaining original script follows below.
+# AIOtv-owned/local progress is the default fallback rather than an external tracking provider.
+tracking_file = 'app/src/main/java/com/nuvio/tv/data/local/TraktSettingsDataStore.kt'
+replace_required(tracking_file, '?: TRAKT\n', '?: NUVIO_SYNC\n')
+replace_required(tracking_file, 'val DEFAULT_WATCH_PROGRESS_SOURCE = WatchProgressSource.TRAKT', 'val DEFAULT_WATCH_PROGRESS_SOURCE = WatchProgressSource.NUVIO_SYNC')
+replace_required(tracking_file, 'val DEFAULT_LIBRARY_SOURCE_MODE = LibrarySourceMode.TRAKT', 'val DEFAULT_LIBRARY_SOURCE_MODE = LibrarySourceMode.LOCAL')
+
+# Remove the P2P category itself, not merely its toggle.
+remove_between(
+    'app/src/main/java/com/nuvio/tv/ui/screens/settings/PlaybackSettingsSections.kt',
+    '        playbackCollapsibleSection(\n            keyPrefix = "p2p",',
+    '        if (playerSettings.internalPlayerEngine == InternalPlayerEngine.EXOPLAYER ||'
+)
+
+# Rebrand all user-facing Android string resources without renaming internal identifiers.
+for strings in (ROOT / 'app/src').glob('*/res/values*/strings.xml'):
+    text = strings.read_text(encoding='utf-8')
+    updated = text.replace('Nuvio Sync', 'AIOtv Account').replace('Nuvio Library', 'AIOtv Library').replace('Nuvio', 'AIOtv')
+    if updated != text:
+        strings.write_text(updated, encoding='utf-8')
+        print(f'AIOtv polish: rebranded strings in {strings.relative_to(ROOT)}')
+
+# Catch hard-coded user-facing literals while leaving class/package names untouched.
+for kt in (ROOT / 'app/src/main/java').rglob('*.kt'):
+    text = kt.read_text(encoding='utf-8')
+    updated = (text
+        .replace('"Nuvio Sync"', '"AIOtv Account"')
+        .replace('"Nuvio Library"', '"AIOtv Library"')
+        .replace('"Nuvio"', '"AIOtv"'))
+    if updated != text:
+        kt.write_text(updated, encoding='utf-8')
+        print(f'AIOtv polish: rebranded literals in {kt.relative_to(ROOT)}')
+
+print('AIOtv polish: complete')
