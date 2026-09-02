@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp"
+    android:height="64dp"
+    android:viewportWidth="96"
+    android:viewportHeight="64">
+
+    <!-- Transparent compact event-horizon glyph for navigation and system states. -->
+    <path
+        android:fillColor="#777B82"
+        android:pathData="M13,30 C18,16 32,9 48,9 C64,9 78,16 83,30 C74,23 62,20 48,20 C34,20 22,23 13,30 Z" />
+    <path
+        android:fillColor="#E1E2E4"
+        android:pathData="M7,33 C19,27 33,25 48,25 C63,25 77,27 89,33 C76,30 62,29 48,29 C34,29 20,30 7,33 Z" />
+    <path
+        android:fillColor="#50545B"
+        android:pathData="M12,36 C22,47 34,53 48,53 C62,53 74,47 84,36 C78,49 64,57 48,57 C32,57 18,49 12,36 Z" />
+    <path
+        android:fillColor="#08090B"
+        android:pathData="M23,31 C28,22 37,18 48,18 C59,18 68,22 73,31 C66,28 57,27 48,27 C39,27 30,28 23,31 Z M22,36 C30,40 39,42 48,42 C57,42 66,40 74,36 C68,47 59,51 48,51 C37,51 28,47 22,36 Z" />
+</vector>

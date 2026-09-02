@@ -62,13 +62,21 @@ data class AioTvBootstrapProfile(
 data class AioTvBootstrapPolicy(
     val revision: Int,
     val updatedAt: String,
-    val addons: List<AioTvManagedAddon> = emptyList()
+    val addons: List<AioTvManagedAddon> = emptyList(),
+    val collections: List<AioTvManagedCollection> = emptyList()
 )
 
 @JsonClass(generateAdapter = true)
 data class AioTvManagedAddon(
     val name: String = "",
     val manifestUrl: String
+)
+
+@JsonClass(generateAdapter = true)
+data class AioTvManagedCollection(
+    val id: String,
+    val name: String = "",
+    val json: String
 )
 
 @JsonClass(generateAdapter = true)

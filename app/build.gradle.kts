@@ -73,7 +73,12 @@ val sentryMappingUploadEnabled = sentryAuthToken != null && sentryOrg != null &&
 val aiotvControlUrl = providers.environmentVariable("AIOTV_CONTROL_URL").orNull
     ?.trim()
     ?.takeIf { it.isNotBlank() }
-    ?: resolveProperty(devProperties, localProperties, "AIOTV_CONTROL_URL")
+    ?: resolveProperty(
+        devProperties,
+        localProperties,
+        "AIOTV_CONTROL_URL",
+        "https://aiocontrol.peden88.stream"
+    )
 
 fun env(name: String): String? = providers.environmentVariable(name).orNull
 

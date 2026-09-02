@@ -6,6 +6,7 @@ ENV NODE_ENV=production
 COPY package.json package-lock.json ./
 COPY src ./src
 COPY public ./public
+COPY scripts ./scripts
 
 RUN mkdir -p /app/data && chown -R node:node /app
 

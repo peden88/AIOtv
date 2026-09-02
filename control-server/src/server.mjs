@@ -20,7 +20,7 @@ import { loadConfig } from './config.mjs';
 import { openDatabase } from './database.mjs';
 
 const COOKIE_NAME = 'aiotv_admin';
-const MAX_BODY_BYTES = 64 * 1024;
+const MAX_BODY_BYTES = 2 * 1024 * 1024;
 
 function cleanText(value, maximum = 100) {
   return String(value ?? '').trim().replace(/\s+/g, ' ').slice(0, maximum);
@@ -110,6 +110,40 @@ async function inspectManifest(manifestUrl, allowHttp) {
     return { name, manifestUrl: current.toString() };
   }
   throw Object.assign(new Error('Addon manifest redirected too many times'), { statusCode: 400 });
+}
+
+function inspectCollectionJson(value) {
+  const text = typeof value === 'string' ? value.trim() : JSON.stringify(value ?? null);
+  if (!text || Buffer.byteLength(text) > 1_500_000) {
+    throw Object.assign(new Error('Collection file is empty or larger than 1.5 MB'), { statusCode: 400 });
+  }
+  let collections;
+  try {
+    collections = JSON.parse(text);
+  } catch {
+    throw Object.assign(new Error('Collection file must contain valid JSON'), { statusCode: 400 });
+  }
+  if (!Array.isArray(collections) || collections.length === 0) {
+    throw Object.assign(new Error('Collection file must contain a non-empty JSON array'), { statusCode: 400 });
+  }
+  for (const [index, collection] of collections.entries()) {
+    if (!collection || typeof collection !== 'object' || Array.isArray(collection)) {
+      throw Object.assign(new Error(`Collection ${index + 1} is not a JSON object`), { statusCode: 400 });
+    }
+    if (!cleanText(collection.id, 200) || !cleanText(collection.title, 200) || !Array.isArray(collection.folders)) {
+      throw Object.assign(
+        new Error(`Collection ${index + 1} must include id, title, and a folders array`),
+        { statusCode: 400 },
+      );
+    }
+  }
+  return {
+    json: JSON.stringify(collections),
+    count: collections.length,
+    suggestedName: collections.length === 1
+      ? cleanText(collections[0].title, 120)
+      : `${collections.length} collections`,
+  };
 }
 
 async function readJson(request) {
@@ -306,7 +340,7 @@ export function createControlServer(overrides = {}) {
           policy: bootstrap.policy,
           management: {
             addonMembership: 'administrator',
-            catalogOrder: 'device',
+            catalogOrder: 'administrator',
           },
         }, 200, { ETag: etag });
       }
@@ -362,6 +396,7 @@ export function createControlServer(overrides = {}) {
       if (method === 'GET' && pathname === '/api/admin/dashboard') {
         return success(response, {
           users: database.listUsers(),
+          groups: database.listGroups(),
           pendingPairingCount: database.countPendingPairings(now),
           recentActivity: database.recentAudit(),
         });
@@ -370,9 +405,13 @@ export function createControlServer(overrides = {}) {
       if (method === 'POST' && pathname === '/api/admin/users') {
         const body = await readJson(request);
         const name = cleanText(body.name, 80);
+        const groupId = cleanText(body.groupId, 80) || null;
         if (name.length < 2) return failure(response, 400, 'invalid_name', 'User name must contain at least two characters');
         try {
-          return success(response, database.createUser(name, now), 201);
+          const user = database.createUser(name, groupId, now);
+          return user
+            ? success(response, user, 201)
+            : failure(response, 400, 'group_not_found', 'Selected addon group was not found');
         } catch (error) {
           if (String(error.message).includes('UNIQUE')) {
             return failure(response, 409, 'duplicate_user', 'A managed user with that name already exists');
@@ -394,6 +433,7 @@ export function createControlServer(overrides = {}) {
           if (changes.name.length < 2) return failure(response, 400, 'invalid_name', 'User name must contain at least two characters');
         }
         if (body.enabled != null) changes.enabled = Boolean(body.enabled);
+        if (body.groupId !== undefined) changes.groupId = cleanText(body.groupId, 80) || null;
         try {
           const user = database.updateUser(userMatch[1], changes, now);
           return user ? success(response, user) : failure(response, 404, 'user_not_found', 'Managed user was not found');
@@ -405,8 +445,51 @@ export function createControlServer(overrides = {}) {
         }
       }
 
-      const userAddonsMatch = /^\/api\/admin\/users\/([0-9a-f-]+)\/addons$/i.exec(pathname);
-      if (userAddonsMatch && method === 'POST') {
+      if (userMatch && method === 'DELETE') {
+        const removed = database.deleteUser(userMatch[1], now);
+        return removed ? success(response) : failure(response, 404, 'user_not_found', 'Managed user was not found');
+      }
+
+      if (method === 'POST' && pathname === '/api/admin/groups') {
+        const body = await readJson(request);
+        const name = cleanText(body.name, 80);
+        if (name.length < 2) return failure(response, 400, 'invalid_name', 'Group name must contain at least two characters');
+        try {
+          return success(response, database.createGroup(name, now), 201);
+        } catch (error) {
+          if (String(error.message).includes('UNIQUE')) {
+            return failure(response, 409, 'duplicate_group', 'An addon group with that name already exists');
+          }
+          throw error;
+        }
+      }
+
+      const groupMatch = /^\/api\/admin\/groups\/([0-9a-f-]+)$/i.exec(pathname);
+      if (groupMatch && method === 'GET') {
+        const group = database.getGroup(groupMatch[1]);
+        return group ? success(response, group) : failure(response, 404, 'group_not_found', 'Addon group was not found');
+      }
+      if (groupMatch && method === 'PATCH') {
+        const body = await readJson(request);
+        const name = cleanText(body.name, 80);
+        if (name.length < 2) return failure(response, 400, 'invalid_name', 'Group name must contain at least two characters');
+        try {
+          const group = database.updateGroup(groupMatch[1], { name }, now);
+          return group ? success(response, group) : failure(response, 404, 'group_not_found', 'Addon group was not found');
+        } catch (error) {
+          if (String(error.message).includes('UNIQUE')) {
+            return failure(response, 409, 'duplicate_group', 'An addon group with that name already exists');
+          }
+          throw error;
+        }
+      }
+      if (groupMatch && method === 'DELETE') {
+        const removed = database.deleteGroup(groupMatch[1], now);
+        return removed ? success(response) : failure(response, 404, 'group_not_found', 'Addon group was not found');
+      }
+
+      const groupAddonsMatch = /^\/api\/admin\/groups\/([0-9a-f-]+)\/addons$/i.exec(pathname);
+      if (groupAddonsMatch && method === 'POST') {
         const body = await readJson(request);
         let parsed;
         try {
@@ -425,20 +508,67 @@ export function createControlServer(overrides = {}) {
           }
         }
         try {
-          const addon = database.addAddon(userAddonsMatch[1], { name, ...parsed }, now);
-          return addon ? success(response, addon, 201) : failure(response, 404, 'user_not_found', 'Managed user was not found');
+          const addon = database.addResource(groupAddonsMatch[1], {
+            type: 'addon',
+            name,
+            ...parsed,
+            canonicalKey: parsed.canonicalUrl,
+          }, now);
+          return addon ? success(response, addon, 201) : failure(response, 404, 'group_not_found', 'Addon group was not found');
         } catch (error) {
           if (String(error.message).includes('UNIQUE')) {
-            return failure(response, 409, 'duplicate_addon', 'That addon is already assigned to this user');
+            return failure(response, 409, 'duplicate_addon', 'That addon is already assigned to this group');
           }
           throw error;
         }
       }
 
-      const addonMatch = /^\/api\/admin\/users\/([0-9a-f-]+)\/addons\/([0-9a-f-]+)$/i.exec(pathname);
-      if (addonMatch && method === 'DELETE') {
-        const removed = database.removeAddon(addonMatch[1], addonMatch[2], now);
-        return removed ? success(response) : failure(response, 404, 'addon_not_found', 'Managed addon was not found');
+      const groupCollectionsMatch = /^\/api\/admin\/groups\/([0-9a-f-]+)\/collections$/i.exec(pathname);
+      if (groupCollectionsMatch && method === 'POST') {
+        const body = await readJson(request);
+        let inspected;
+        try {
+          inspected = inspectCollectionJson(body.collectionJson);
+        } catch (error) {
+          return failure(response, error.statusCode ?? 400, 'invalid_collection', error.message);
+        }
+        const name = cleanText(body.name, 120) || inspected.suggestedName;
+        try {
+          const collection = database.addResource(groupCollectionsMatch[1], {
+            type: 'collection',
+            name,
+            collectionJson: inspected.json,
+            canonicalKey: sha256(inspected.json),
+          }, now);
+          return collection
+            ? success(response, collection, 201)
+            : failure(response, 404, 'group_not_found', 'Addon group was not found');
+        } catch (error) {
+          if (String(error.message).includes('UNIQUE')) {
+            return failure(response, 409, 'duplicate_collection', 'That collection file is already assigned to this group');
+          }
+          throw error;
+        }
+      }
+
+      const groupOrderMatch = /^\/api\/admin\/groups\/([0-9a-f-]+)\/resources\/order$/i.exec(pathname);
+      if (groupOrderMatch && method === 'PUT') {
+        const body = await readJson(request);
+        const resourceIds = Array.isArray(body.resourceIds)
+          ? body.resourceIds.map((id) => cleanText(id, 80))
+          : [];
+        try {
+          const group = database.reorderResources(groupOrderMatch[1], resourceIds, now);
+          return group ? success(response, group) : failure(response, 404, 'group_not_found', 'Addon group was not found');
+        } catch (error) {
+          return failure(response, error.statusCode ?? 400, 'invalid_resource_order', error.message);
+        }
+      }
+
+      const groupResourceMatch = /^\/api\/admin\/groups\/([0-9a-f-]+)\/resources\/([0-9a-f-]+)$/i.exec(pathname);
+      if (groupResourceMatch && method === 'DELETE') {
+        const removed = database.removeResource(groupResourceMatch[1], groupResourceMatch[2], now);
+        return removed ? success(response) : failure(response, 404, 'resource_not_found', 'Managed resource was not found');
       }
 
       const pairingCodeMatch = /^\/api\/admin\/pairings\/([A-Za-z0-9-]+)$/i.exec(pathname);

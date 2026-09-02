@@ -5,7 +5,10 @@ AIOtv Control is the standalone administrator dashboard and device API for the m
 ## First-build capabilities
 
 - Eight-character, single-use TV pairing codes with a separate 256-bit device credential.
-- Administrator-created managed users and per-user addon groups.
+- Administrator-created users assigned to reusable addon groups.
+- Ordered group resources containing addon manifests and uploaded AIOtv collection JSON files.
+- Automatic enforcement of addon membership, addon order and collections on paired TVs.
+- Reassignment and deletion controls for users, groups and individual resources.
 - Multiple independently revocable TVs per managed user.
 - Authoritative bootstrap policies with revisions and ETags.
 - Automatic addon manifest name lookup, with an administrator override.
@@ -46,7 +49,32 @@ SQLite data is kept in the named `aiotv-control-data` Docker volume so container
 
 ## Android build
 
-Set `AIOTV_CONTROL_URL` to the same external HTTPS origin when building AIOtv. Local builds can put it in the repository's `local.properties`; GitHub Actions reads the `AIOTV_CONTROL_URL` repository variable. The setting is compiled into the APK and should not include a trailing slash.
+The production fallback is `https://aiocontrol.peden88.stream`. Local builds can override it with `AIOTV_CONTROL_URL` in `local.properties`; GitHub Actions reads the repository variable of the same name. The setting is compiled into the APK and should not include a trailing slash.
+
+## Dockhand deployment
+
+Use `compose.dockhand.yaml` as a new Dockhand stack and keep **Re-pull images** enabled. It deploys `ghcr.io/peden88/aiotv-control:test`, persists SQLite in the named `aiotv-control-data` volume, joins the existing `pangolin_frontend` network, and exposes a loopback-only diagnostic port at `127.0.0.1:3010`.
+
+Before creating the stack, generate the two values that are intentionally absent from Compose. Generate the password hash on a trusted machine with Node.js 24 and this repository checked out:
+
+```bash
+read -rsp 'AIOtv Control admin password: ' AIOTV_SETUP_PASSWORD; echo
+printf '%s' "$AIOTV_SETUP_PASSWORD" | npm --prefix control-server run hash-password -- --stdin
+unset AIOTV_SETUP_PASSWORD
+openssl rand -base64 48
+```
+
+Add the first command's `scrypt.…` output to the Dockhand stack environment as `AIOTV_ADMIN_PASSWORD_HASH`. Add the random second output as `AIOTV_SESSION_SECRET`. Do not put the plain administrator password in Compose.
+
+In Pangolin, create the `aiocontrol.peden88.stream` resource with target `http://aiotv-control:3000`. Do not enable whole-host Pangolin SSO: the TV-facing `/api/v1/*` routes must remain reachable without a browser login. The dashboard still requires its own signed administrator session.
+
+After deployment, confirm the container is healthy and verify:
+
+```bash
+curl --fail https://aiocontrol.peden88.stream/health
+```
+
+The response should report `aiotv-control` with status `ok`. Then open the public URL, sign in, create an addon group, add its resources, create a managed user and assign the group before installing the TV build.
 
 ## API summary
 
@@ -60,8 +88,14 @@ Set `AIOTV_CONTROL_URL` to the same external HTTPS origin when building AIOtv. L
 
 - `POST /api/admin/login`
 - `GET /api/admin/dashboard`
-- `POST/PATCH /api/admin/users`
-- `POST/DELETE /api/admin/users/:id/addons`
+- `POST /api/admin/users`
+- `GET/PATCH/DELETE /api/admin/users/:id`
+- `POST /api/admin/groups`
+- `GET/PATCH/DELETE /api/admin/groups/:id`
+- `POST /api/admin/groups/:id/addons`
+- `POST /api/admin/groups/:id/collections`
+- `PUT /api/admin/groups/:id/resources/order`
+- `DELETE /api/admin/groups/:id/resources/:resourceId`
 - `GET/POST /api/admin/pairings/:code|:id/approve`
 - `PATCH /api/admin/devices/:id`
 - `POST /api/admin/devices/:id/revoke`

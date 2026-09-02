@@ -1,0 +1,46 @@
+services:
+  aiotv-control:
+    image: ghcr.io/peden88/aiotv-control:test
+    pull_policy: always
+    container_name: aiotv-control
+    restart: unless-stopped
+    init: true
+    environment:
+      AIOTV_PUBLIC_URL: https://aiocontrol.peden88.stream
+      AIOTV_ADMIN_PASSWORD_HASH: ${AIOTV_ADMIN_PASSWORD_HASH:?Set this in the Dockhand stack environment}
+      AIOTV_SESSION_SECRET: ${AIOTV_SESSION_SECRET:?Set this in the Dockhand stack environment}
+      AIOTV_DATABASE_PATH: /app/data/aiotv-control.sqlite
+      AIOTV_HOST: 0.0.0.0
+      AIOTV_PORT: "3000"
+      AIOTV_COOKIE_SECURE: "true"
+      AIOTV_ALLOW_HTTP_ADDONS: "false"
+    volumes:
+      - aiotv-control-data:/app/data
+    ports:
+      - "127.0.0.1:3010:3000"
+    networks:
+      - pangolin
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    stop_grace_period: 15s
+
+networks:
+  pangolin:
+    external: true
+    name: pangolin_frontend
+
+volumes:
+  aiotv-control-data:
+    name: aiotv-control-data

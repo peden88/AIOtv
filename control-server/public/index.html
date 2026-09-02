@@ -66,8 +66,12 @@
             <strong id="device-count">0</strong>
           </article>
           <article class="metric">
-            <span>Assigned addons</span>
-            <strong id="addon-count">0</strong>
+            <span>Addon groups</span>
+            <strong id="group-count">0</strong>
+          </article>
+          <article class="metric">
+            <span>Managed resources</span>
+            <strong id="resource-count">0</strong>
           </article>
           <article class="metric metric-pending">
             <span>Waiting to pair</span>
@@ -75,8 +79,14 @@
           </article>
         </section>
 
+        <nav class="page-tabs" aria-label="Control sections">
+          <button class="page-tab is-active" type="button" data-page-target="users-page">Users</button>
+          <button class="page-tab" type="button" data-page-target="groups-page">Addon groups</button>
+        </nav>
+
         <div class="content-grid">
-          <section class="primary-column" aria-labelledby="users-heading">
+          <div class="primary-column">
+          <section id="users-page" class="dashboard-page" aria-labelledby="users-heading">
             <div class="section-heading">
               <div>
                 <p class="eyebrow">Profiles</p>
@@ -92,6 +102,25 @@
               <button class="button button-primary" type="button" data-action="new-user">Create user</button>
             </div>
           </section>
+
+          <section id="groups-page" class="dashboard-page" aria-labelledby="groups-heading" hidden>
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Reusable policies</p>
+                <h2 id="groups-heading">Addon groups</h2>
+                <p>Build ordered sets of addons and collection files, then assign them to users.</p>
+              </div>
+              <button id="new-group-button" class="button button-primary" type="button">Create group</button>
+            </div>
+            <div id="groups-grid" class="users-grid"></div>
+            <div id="groups-empty" class="empty-state" hidden>
+              <div class="empty-icon" aria-hidden="true">+</div>
+              <h3>Create your first addon group</h3>
+              <p>Groups are reusable server-managed addon and collection policies.</p>
+              <button class="button button-primary" type="button" data-action="new-group">Create group</button>
+            </div>
+          </section>
+          </div>
 
           <aside class="activity-panel" aria-labelledby="activity-heading">
             <div class="section-heading section-heading-compact">
@@ -118,11 +147,33 @@
         </div>
         <label for="new-user-name">Display name</label>
         <input id="new-user-name" name="name" autocomplete="off" maxlength="80" placeholder="e.g. Gary" required>
-        <p class="field-help">This name is visible only in your dashboard.</p>
+        <label for="new-user-group">Addon group</label>
+        <select id="new-user-group" name="groupId"></select>
+        <p class="field-help">The group controls which addons and collections appear on this user's TVs.</p>
         <p class="form-error" data-form-error role="alert"></p>
         <div class="dialog-actions">
           <button class="button button-quiet" type="button" data-close-dialog>Cancel</button>
           <button class="button button-primary" type="submit">Create user</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="new-group-dialog" class="dialog">
+      <form id="new-group-form" class="dialog-card">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">Managed resources</p>
+            <h2>Create addon group</h2>
+          </div>
+          <button class="icon-button" type="button" data-close-dialog aria-label="Close">×</button>
+        </div>
+        <label for="new-group-name">Group name</label>
+        <input id="new-group-name" name="name" autocomplete="off" maxlength="80" placeholder="e.g. Family" required>
+        <p class="field-help">A group can be assigned to any number of users.</p>
+        <p class="form-error" data-form-error role="alert"></p>
+        <div class="dialog-actions">
+          <button class="button button-quiet" type="button" data-close-dialog>Cancel</button>
+          <button class="button button-primary" type="submit">Create group</button>
         </div>
       </form>
     </dialog>
@@ -170,28 +221,21 @@
           <span id="profile-status" class="status-pill"></span>
           <span id="profile-revision" class="muted"></span>
           <button id="toggle-user-button" class="button button-quiet button-small" type="button"></button>
+          <button id="delete-user-button" class="button button-danger button-small" type="button">Delete user</button>
         </div>
 
-        <section class="profile-section" aria-labelledby="profile-addons-heading">
+        <section class="profile-section" aria-labelledby="profile-group-heading">
           <div class="section-heading section-heading-compact">
             <div>
-              <h3 id="profile-addons-heading">Assigned addons</h3>
-              <p>Membership is enforced on every paired TV.</p>
+              <h3 id="profile-group-heading">Assigned addon group</h3>
+              <p>Changing this updates every paired TV on its next policy refresh.</p>
             </div>
           </div>
-          <div id="profile-addons" class="managed-list"></div>
-          <form id="add-addon-form" class="addon-form">
-            <div>
-              <label for="addon-url">Configured manifest URL</label>
-              <input id="addon-url" name="manifestUrl" type="url" placeholder="https://example.com/config/manifest.json" required>
-            </div>
-            <div>
-              <label for="addon-name">Name override <span class="muted">optional</span></label>
-              <input id="addon-name" name="name" maxlength="120" placeholder="Fetched automatically">
-            </div>
-            <button class="button button-primary" type="submit">Assign addon</button>
+          <form id="assign-group-form" class="inline-form">
+            <select id="profile-group" name="groupId"></select>
+            <button class="button button-primary" type="submit">Save group</button>
           </form>
-          <p id="addon-error" class="form-error" role="alert"></p>
+          <p id="assign-group-error" class="form-error" role="alert"></p>
         </section>
 
         <section class="profile-section" aria-labelledby="profile-devices-heading">
@@ -202,6 +246,75 @@
             </div>
           </div>
           <div id="profile-devices" class="managed-list"></div>
+        </section>
+      </div>
+    </dialog>
+
+    <dialog id="group-dialog" class="dialog dialog-large">
+      <div class="dialog-card dialog-card-profile">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">Addon group</p>
+            <h2 id="group-name">Group</h2>
+          </div>
+          <button class="icon-button" type="button" data-close-dialog aria-label="Close">×</button>
+        </div>
+
+        <div class="profile-toolbar">
+          <span id="group-user-count" class="status-pill"></span>
+          <span id="group-resource-count" class="muted"></span>
+          <button id="delete-group-button" class="button button-danger button-small" type="button">Delete group</button>
+        </div>
+
+        <section class="profile-section" aria-labelledby="group-resources-heading">
+          <div class="section-heading section-heading-compact">
+            <div>
+              <h3 id="group-resources-heading">Ordered resources</h3>
+              <p>Use the arrow controls to set the server-managed addon and collection order.</p>
+            </div>
+          </div>
+          <div id="group-resources" class="managed-list"></div>
+        </section>
+
+        <section class="profile-section" aria-labelledby="group-add-addon-heading">
+          <div class="section-heading section-heading-compact">
+            <div>
+              <h3 id="group-add-addon-heading">Add an addon</h3>
+            </div>
+          </div>
+          <form id="add-addon-form" class="addon-form">
+            <div>
+              <label for="addon-url">Configured manifest URL</label>
+              <input id="addon-url" name="manifestUrl" type="url" placeholder="https://example.com/config/manifest.json" required>
+            </div>
+            <div>
+              <label for="addon-name">Name override <span class="muted">optional</span></label>
+              <input id="addon-name" name="name" maxlength="120" placeholder="Fetched automatically">
+            </div>
+            <button class="button button-primary" type="submit">Add addon</button>
+          </form>
+          <p id="addon-error" class="form-error" role="alert"></p>
+        </section>
+
+        <section class="profile-section" aria-labelledby="group-add-collection-heading">
+          <div class="section-heading section-heading-compact">
+            <div>
+              <h3 id="group-add-collection-heading">Add collection file</h3>
+              <p>Upload an AIOtv collections JSON export. Its collections are applied automatically when a device signs in.</p>
+            </div>
+          </div>
+          <form id="add-collection-form" class="collection-form">
+            <div>
+              <label for="collection-file">Collections .json file</label>
+              <input id="collection-file" name="collectionFile" type="file" accept="application/json,.json" required>
+            </div>
+            <div>
+              <label for="collection-name">Label <span class="muted">optional</span></label>
+              <input id="collection-name" name="name" maxlength="120" placeholder="Uses collection title">
+            </div>
+            <button class="button button-primary" type="submit">Add collections</button>
+          </form>
+          <p id="collection-error" class="form-error" role="alert"></p>
         </section>
       </div>
     </dialog>

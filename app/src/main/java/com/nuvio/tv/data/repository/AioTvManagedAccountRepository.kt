@@ -6,6 +6,7 @@ import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.core.aio.AioTvServerConfig
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.data.local.AioTvAuthStore
+import com.nuvio.tv.data.local.CollectionsDataStore
 import com.nuvio.tv.data.remote.api.AioTvApi
 import com.nuvio.tv.data.remote.dto.AioTvBootstrapData
 import com.nuvio.tv.data.remote.dto.AioTvDeviceStartData
@@ -22,7 +23,8 @@ import javax.inject.Singleton
 class AioTvManagedAccountRepository @Inject constructor(
     private val api: AioTvApi,
     private val authStore: AioTvAuthStore,
-    private val addonRepository: AddonRepository
+    private val addonRepository: AddonRepository,
+    private val collectionsDataStore: CollectionsDataStore
 ) {
     sealed interface TokenPollResult {
         data class Pending(val intervalSeconds: Int) : TokenPollResult
@@ -167,6 +169,7 @@ class AioTvManagedAccountRepository @Inject constructor(
             }
 
             reconcileManagedAddons(data.policy.addons)
+            reconcileManagedCollections(data.policy.collections.map { it.json })
             authStore.saveBootstrapMetadata(response.headers()["ETag"], data.policy.revision)
             BootstrapResult.Ready(data)
         } catch (error: Exception) {
@@ -207,13 +210,21 @@ class AioTvManagedAccountRepository @Inject constructor(
         }
 
         // Remove every local addon not present in the administrator policy.
-        // We intentionally do not call setAddonOrder(); existing assigned
-        // addons retain their local order and catalog-order preferences.
         installed.forEach { addon ->
             if (!desired.containsKey(canonicalizeAddonUrl(addon.baseUrl))) {
                 addonRepository.removeAddon(addon.baseUrl)
             }
         }
+
+        // The dashboard order is authoritative in managed builds.
+        addonRepository.setAddonOrder(assignments.map { it.manifestUrl })
+    }
+
+    private suspend fun reconcileManagedCollections(collectionFiles: List<String>) {
+        val collections = collectionFiles
+            .flatMap { json -> collectionsDataStore.importFromJson(json) }
+            .distinctBy { collection -> collection.id }
+        collectionsDataStore.setCollections(collections)
     }
 
     private fun canonicalizeAddonUrl(url: String): String {

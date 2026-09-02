@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
 import { createControlServer } from '../src/server.mjs';
 import { createPasswordHash } from '../src/security.mjs';
@@ -57,15 +58,22 @@ test('administrator can create a profile and pair, bootstrap, then revoke a TV',
     },
   });
 
+  const createdGroup = await read(await adminRequest('/api/admin/groups', {
+    method: 'POST',
+    body: JSON.stringify({ name: 'Gary resources' }),
+  }));
+  assert.equal(createdGroup.response.status, 201);
+  const groupId = createdGroup.payload.data.id;
+
   const createdUser = await read(await adminRequest('/api/admin/users', {
     method: 'POST',
-    body: JSON.stringify({ name: 'Gary' }),
+    body: JSON.stringify({ name: 'Gary', groupId }),
   }));
   assert.equal(createdUser.response.status, 201);
   assert.equal(createdUser.payload.data.name, 'Gary');
   const userId = createdUser.payload.data.id;
 
-  const addon = await read(await adminRequest(`/api/admin/users/${userId}/addons`, {
+  const addon = await read(await adminRequest(`/api/admin/groups/${groupId}/addons`, {
     method: 'POST',
     body: JSON.stringify({
       name: 'Example Streams – Gary',
@@ -74,6 +82,29 @@ test('administrator can create a profile and pair, bootstrap, then revoke a TV',
   }));
   assert.equal(addon.response.status, 201);
   assert.equal(addon.payload.data.name, 'Example Streams – Gary');
+
+  const collection = await read(await adminRequest(`/api/admin/groups/${groupId}/collections`, {
+    method: 'POST',
+    body: JSON.stringify({
+      name: 'Gary picks',
+      collectionJson: JSON.stringify([{
+        id: 'gary-picks',
+        title: 'Gary picks',
+        folders: [],
+      }]),
+    }),
+  }));
+  assert.equal(collection.response.status, 201);
+  assert.equal(collection.payload.data.collectionCount, 1);
+
+  const reordered = await read(await adminRequest(`/api/admin/groups/${groupId}/resources/order`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      resourceIds: [collection.payload.data.id, addon.payload.data.id],
+    }),
+  }));
+  assert.equal(reordered.response.status, 200);
+  assert.deepEqual(reordered.payload.data.resources.map((resource) => resource.type), ['collection', 'addon']);
 
   const start = await read(await fetch(`${base}/api/v1/pairings`, {
     method: 'POST',
@@ -124,7 +155,9 @@ test('administrator can create a profile and pair, bootstrap, then revoke a TV',
   assert.equal(bootstrap.payload.data.profile.name, 'Gary');
   assert.equal(bootstrap.payload.data.device.name, 'Gary’s living room TV');
   assert.equal(bootstrap.payload.data.policy.addons.length, 1);
-  assert.equal(bootstrap.payload.data.management.catalogOrder, 'device');
+  assert.equal(bootstrap.payload.data.policy.collections.length, 1);
+  assert.equal(bootstrap.payload.data.policy.collections[0].name, 'Gary picks');
+  assert.equal(bootstrap.payload.data.management.catalogOrder, 'administrator');
   assert.ok(etag);
 
   const notModified = await fetch(`${base}/api/v1/device/bootstrap`, {
@@ -137,7 +170,7 @@ test('administrator can create a profile and pair, bootstrap, then revoke a TV',
 
   const secondUser = await read(await adminRequest('/api/admin/users', {
     method: 'POST',
-    body: JSON.stringify({ name: 'Living room' }),
+    body: JSON.stringify({ name: 'Living room', groupId }),
   }));
   const reassigned = await read(await adminRequest(`/api/admin/devices/${approved.payload.data.deviceId}`, {
     method: 'PATCH',
@@ -212,8 +245,117 @@ test('administrator routes reject missing CSRF and duplicate managed users', asy
     },
     body: JSON.stringify({ name: 'Michael' }),
   });
-  assert.equal((await create()).status, 201);
+  const firstUser = await read(await create());
+  assert.equal(firstUser.response.status, 201);
   const duplicate = await read(await create());
   assert.equal(duplicate.response.status, 409);
   assert.equal(duplicate.payload.error.code, 'duplicate_user');
+
+  const group = await read(await fetch(`${base}/api/admin/groups`, {
+    method: 'POST',
+    headers: {
+      cookie,
+      'x-aiotv-csrf': csrf,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ name: 'Family' }),
+  }));
+  assert.equal(group.response.status, 201);
+
+  const assigned = await read(await fetch(`${base}/api/admin/users/${firstUser.payload.data.id}`, {
+    method: 'PATCH',
+    headers: {
+      cookie,
+      'x-aiotv-csrf': csrf,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ groupId: group.payload.data.id }),
+  }));
+  assert.equal(assigned.payload.data.group.name, 'Family');
+
+  const deletedGroup = await read(await fetch(`${base}/api/admin/groups/${group.payload.data.id}`, {
+    method: 'DELETE',
+    headers: { cookie, 'x-aiotv-csrf': csrf },
+  }));
+  assert.equal(deletedGroup.response.status, 200);
+
+  const unassigned = await read(await fetch(`${base}/api/admin/users/${firstUser.payload.data.id}`, {
+    headers: { cookie },
+  }));
+  assert.equal(unassigned.payload.data.groupId, null);
+
+  const deletedUser = await read(await fetch(`${base}/api/admin/users/${firstUser.payload.data.id}`, {
+    method: 'DELETE',
+    headers: { cookie, 'x-aiotv-csrf': csrf },
+  }));
+  assert.equal(deletedUser.response.status, 200);
+  assert.equal((await fetch(`${base}/api/admin/users/${firstUser.payload.data.id}`, {
+    headers: { cookie },
+  })).status, 404);
+});
+
+test('legacy per-user addons migrate into reusable groups without data loss', async (t) => {
+  const tempDir = mkdtempSync(path.join(os.tmpdir(), 'aiotv-control-migration-'));
+  const databasePath = path.join(tempDir, 'legacy.sqlite');
+  const legacy = new DatabaseSync(databasePath);
+  legacy.exec(`
+    PRAGMA foreign_keys = ON;
+    CREATE TABLE managed_users (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL COLLATE NOCASE,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      policy_revision INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE managed_addons (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES managed_users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      manifest_url TEXT NOT NULL,
+      canonical_url TEXT NOT NULL,
+      position INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      UNIQUE(user_id, canonical_url)
+    );
+  `);
+  const timestamp = '2026-09-02T20:00:00.000Z';
+  legacy.prepare(`
+    INSERT INTO managed_users (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)
+  `).run('legacy-user', 'Legacy user', timestamp, timestamp);
+  legacy.prepare(`
+    INSERT INTO managed_addons
+      (id, user_id, name, manifest_url, canonical_url, position, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    'legacy-addon',
+    'legacy-user',
+    'Legacy addon',
+    'https://example.com/manifest.json',
+    'https://example.com',
+    0,
+    timestamp,
+  );
+  legacy.close();
+
+  const app = createControlServer({
+    host: '127.0.0.1',
+    port: 0,
+    publicUrl: 'http://127.0.0.1',
+    databasePath,
+    adminPassword: 'correct horse battery staple',
+    sessionSecret: 'migration-test-secret-more-than-32-characters',
+    cookieSecure: false,
+  });
+  t.after(async () => {
+    await app.close();
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  const user = app.database.getUser('legacy-user');
+  assert.ok(user.groupId);
+  assert.equal(user.group.name, 'Legacy user group');
+  assert.equal(user.group.resources.length, 1);
+  assert.equal(user.group.resources[0].manifestUrl, 'https://example.com/manifest.json');
+  assert.equal(app.database.listGroups().length, 1);
 });

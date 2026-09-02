@@ -43,6 +43,32 @@ export function openDatabase(databasePath) {
       UNIQUE(user_id, canonical_url)
     );
 
+    CREATE TABLE IF NOT EXISTS managed_groups (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL COLLATE NOCASE,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS managed_groups_name_uq
+      ON managed_groups(name COLLATE NOCASE);
+
+    CREATE TABLE IF NOT EXISTS managed_resources (
+      id TEXT PRIMARY KEY,
+      group_id TEXT NOT NULL REFERENCES managed_groups(id) ON DELETE CASCADE,
+      resource_type TEXT NOT NULL CHECK (resource_type IN ('addon', 'collection')),
+      name TEXT NOT NULL,
+      manifest_url TEXT,
+      canonical_key TEXT NOT NULL,
+      collection_json TEXT,
+      position INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      UNIQUE(group_id, resource_type, canonical_key)
+    );
+
+    CREATE INDEX IF NOT EXISTS managed_resources_group_idx
+      ON managed_resources(group_id, position);
+
     CREATE TABLE IF NOT EXISTS devices (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES managed_users(id),
@@ -84,6 +110,40 @@ export function openDatabase(databasePath) {
     );
   `);
 
+  const userColumns = db.prepare('PRAGMA table_info(managed_users)').all();
+  const hadGroupColumn = userColumns.some((column) => column.name === 'group_id');
+  if (!hadGroupColumn) {
+    db.exec('ALTER TABLE managed_users ADD COLUMN group_id TEXT REFERENCES managed_groups(id) ON DELETE SET NULL');
+  }
+
+  // Upgrade the original MVP's implicit per-user addon lists into explicit,
+  // reusable groups without discarding an existing deployment's assignments.
+  const usersWithoutGroups = hadGroupColumn ? [] : db.prepare(`
+    SELECT id, name, created_at AS createdAt FROM managed_users WHERE group_id IS NULL
+  `).all();
+  for (const user of usersWithoutGroups) {
+    const groupId = randomUUID();
+    let groupName = `${user.name} group`;
+    let suffix = 2;
+    while (db.prepare('SELECT 1 FROM managed_groups WHERE name = ? COLLATE NOCASE').get(groupName)) {
+      groupName = `${user.name} group ${suffix}`;
+      suffix += 1;
+    }
+    db.prepare(`
+      INSERT INTO managed_groups (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)
+    `).run(groupId, groupName, user.createdAt, user.createdAt);
+    db.prepare('UPDATE managed_users SET group_id = ? WHERE id = ?').run(groupId, user.id);
+  }
+
+  db.prepare(`
+    INSERT OR IGNORE INTO managed_resources
+      (id, group_id, resource_type, name, manifest_url, canonical_key, position, created_at)
+    SELECT a.id, u.group_id, 'addon', a.name, a.manifest_url, a.canonical_url, a.position, a.created_at
+    FROM managed_addons a
+    JOIN managed_users u ON u.id = a.user_id
+    WHERE u.group_id IS NOT NULL
+  `).run();
+
   const transaction = (operation) => {
     db.exec('BEGIN IMMEDIATE');
     try {
@@ -103,20 +163,49 @@ export function openDatabase(databasePath) {
     `).run(randomUUID(), eventType, summary, targetType, targetId, iso(now));
   };
 
+  const getGroup = (id, includeContent = false) => {
+    const group = db.prepare(`
+      SELECT g.id, g.name, g.created_at AS createdAt, g.updated_at AS updatedAt,
+             COUNT(DISTINCT u.id) AS userCount
+      FROM managed_groups g
+      LEFT JOIN managed_users u ON u.group_id = g.id
+      WHERE g.id = ?
+      GROUP BY g.id
+    `).get(id);
+    if (!group) return null;
+    const resources = rowsToPlain(db.prepare(`
+      SELECT id, resource_type AS type, name, manifest_url AS manifestUrl,
+             collection_json AS collectionJson, position, created_at AS createdAt
+      FROM managed_resources WHERE group_id = ? ORDER BY position, created_at
+    `).all(id)).map((resource) => {
+      if (resource.type !== 'collection') return resource;
+      const collectionCount = (() => {
+        try { return JSON.parse(resource.collectionJson).length; } catch { return 0; }
+      })();
+      return {
+        ...resource,
+        collectionCount,
+        byteSize: Buffer.byteLength(resource.collectionJson ?? ''),
+        ...(!includeContent ? { collectionJson: undefined } : {}),
+      };
+    });
+    return { ...group, resources };
+  };
+
   const getUser = (id) => {
     const user = db.prepare(`
       SELECT id, name, enabled, policy_revision AS policyRevision,
-             created_at AS createdAt, updated_at AS updatedAt
+             group_id AS groupId, created_at AS createdAt, updated_at AS updatedAt
       FROM managed_users WHERE id = ?
     `).get(id);
     if (!user) return null;
+    const group = user.groupId ? getGroup(user.groupId) : null;
     return {
       ...user,
       enabled: Boolean(user.enabled),
-      addons: rowsToPlain(db.prepare(`
-        SELECT id, name, manifest_url AS manifestUrl, position, created_at AS createdAt
-        FROM managed_addons WHERE user_id = ? ORDER BY position, created_at
-      `).all(id)),
+      group,
+      addons: group?.resources.filter((resource) => resource.type === 'addon') ?? [],
+      collections: group?.resources.filter((resource) => resource.type === 'collection') ?? [],
       devices: rowsToPlain(db.prepare(`
         SELECT id, name, platform, app_version AS appVersion, paired_at AS pairedAt,
                last_seen_at AS lastSeenAt, revoked_at AS revokedAt
@@ -128,12 +217,13 @@ export function openDatabase(databasePath) {
   return {
     close: () => db.close(),
 
-    createUser(name, now = new Date()) {
+    createUser(name, groupId = null, now = new Date()) {
+      if (groupId && !getGroup(groupId)) return null;
       const id = randomUUID();
       const timestamp = iso(now);
       db.prepare(`
-        INSERT INTO managed_users (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)
-      `).run(id, name, timestamp, timestamp);
+        INSERT INTO managed_users (id, name, group_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
+      `).run(id, name, groupId, timestamp, timestamp);
       audit('user.created', `Created managed user ${name}`, 'user', id, now);
       return getUser(id);
     },
@@ -141,11 +231,14 @@ export function openDatabase(databasePath) {
     listUsers() {
       return rowsToPlain(db.prepare(`
         SELECT u.id, u.name, u.enabled, u.policy_revision AS policyRevision,
+               u.group_id AS groupId, g.name AS groupName,
                u.updated_at AS updatedAt,
-               COUNT(DISTINCT a.id) AS addonCount,
+               COUNT(DISTINCT CASE WHEN r.resource_type = 'addon' THEN r.id END) AS addonCount,
+               COUNT(DISTINCT CASE WHEN r.resource_type = 'collection' THEN r.id END) AS collectionCount,
                COUNT(DISTINCT CASE WHEN d.revoked_at IS NULL THEN d.id END) AS deviceCount
         FROM managed_users u
-        LEFT JOIN managed_addons a ON a.user_id = u.id
+        LEFT JOIN managed_groups g ON g.id = u.group_id
+        LEFT JOIN managed_resources r ON r.group_id = u.group_id
         LEFT JOIN devices d ON d.user_id = u.id
         GROUP BY u.id
         ORDER BY u.name COLLATE NOCASE
@@ -159,13 +252,181 @@ export function openDatabase(databasePath) {
       if (!current) return null;
       const name = changes.name ?? current.name;
       const enabled = changes.enabled == null ? current.enabled : Boolean(changes.enabled);
+      const groupId = Object.hasOwn(changes, 'groupId') ? (changes.groupId || null) : current.groupId;
+      if (groupId && !getGroup(groupId)) return null;
       db.prepare(`
         UPDATE managed_users
-        SET name = ?, enabled = ?, policy_revision = policy_revision + 1, updated_at = ?
+        SET name = ?, enabled = ?, group_id = ?, policy_revision = policy_revision + 1, updated_at = ?
         WHERE id = ?
-      `).run(name, enabled ? 1 : 0, iso(now), id);
+      `).run(name, enabled ? 1 : 0, groupId, iso(now), id);
       audit('user.updated', `Updated managed user ${name}`, 'user', id, now);
       return getUser(id);
+    },
+
+    deleteUser(id, now = new Date()) {
+      return transaction(() => {
+        const user = getUser(id);
+        if (!user) return false;
+        db.prepare(`
+          UPDATE pairing_requests
+          SET status = 'expired', assigned_user_id = NULL, device_id = NULL
+          WHERE assigned_user_id = ? OR device_id IN (SELECT id FROM devices WHERE user_id = ?)
+        `).run(id, id);
+        db.prepare('DELETE FROM devices WHERE user_id = ?').run(id);
+        db.prepare('DELETE FROM managed_users WHERE id = ?').run(id);
+        audit('user.deleted', `Deleted managed user ${user.name}`, 'user', id, now);
+        return true;
+      });
+    },
+
+    createGroup(name, now = new Date()) {
+      const id = randomUUID();
+      const timestamp = iso(now);
+      db.prepare(`
+        INSERT INTO managed_groups (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)
+      `).run(id, name, timestamp, timestamp);
+      audit('group.created', `Created addon group ${name}`, 'group', id, now);
+      return getGroup(id);
+    },
+
+    listGroups() {
+      return rowsToPlain(db.prepare(`
+        SELECT g.id, g.name, g.created_at AS createdAt, g.updated_at AS updatedAt,
+               COUNT(DISTINCT u.id) AS userCount,
+               COUNT(DISTINCT CASE WHEN r.resource_type = 'addon' THEN r.id END) AS addonCount,
+               COUNT(DISTINCT CASE WHEN r.resource_type = 'collection' THEN r.id END) AS collectionCount
+        FROM managed_groups g
+        LEFT JOIN managed_users u ON u.group_id = g.id
+        LEFT JOIN managed_resources r ON r.group_id = g.id
+        GROUP BY g.id
+        ORDER BY g.name COLLATE NOCASE
+      `).all());
+    },
+
+    getGroup,
+
+    updateGroup(id, changes, now = new Date()) {
+      const group = getGroup(id);
+      if (!group) return null;
+      const name = changes.name ?? group.name;
+      db.prepare('UPDATE managed_groups SET name = ?, updated_at = ? WHERE id = ?')
+        .run(name, iso(now), id);
+      audit('group.updated', `Updated addon group ${name}`, 'group', id, now);
+      return getGroup(id);
+    },
+
+    deleteGroup(id, now = new Date()) {
+      return transaction(() => {
+        const group = getGroup(id);
+        if (!group) return false;
+        db.prepare(`
+          UPDATE managed_users
+          SET group_id = NULL, policy_revision = policy_revision + 1, updated_at = ?
+          WHERE group_id = ?
+        `).run(iso(now), id);
+        db.prepare('DELETE FROM managed_groups WHERE id = ?').run(id);
+        audit('group.deleted', `Deleted addon group ${group.name}`, 'group', id, now);
+        return true;
+      });
+    },
+
+    addResource(groupId, resource, now = new Date()) {
+      return transaction(() => {
+        const group = getGroup(groupId);
+        if (!group) return null;
+        const id = randomUUID();
+        const nextPosition = db.prepare(`
+          SELECT COALESCE(MAX(position), -1) + 1 AS position
+          FROM managed_resources WHERE group_id = ?
+        `).get(groupId).position;
+        db.prepare(`
+          INSERT INTO managed_resources
+            (id, group_id, resource_type, name, manifest_url, canonical_key,
+             collection_json, position, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          id,
+          groupId,
+          resource.type,
+          resource.name,
+          resource.manifestUrl ?? null,
+          resource.canonicalKey,
+          resource.collectionJson ?? null,
+          nextPosition,
+          iso(now),
+        );
+        db.prepare('UPDATE managed_groups SET updated_at = ? WHERE id = ?').run(iso(now), groupId);
+        db.prepare(`
+          UPDATE managed_users
+          SET policy_revision = policy_revision + 1, updated_at = ?
+          WHERE group_id = ?
+        `).run(iso(now), groupId);
+        audit(
+          `${resource.type}.added`,
+          `Added ${resource.name} to ${group.name}`,
+          'group',
+          groupId,
+          now,
+        );
+        return getGroup(groupId).resources.find((item) => item.id === id);
+      });
+    },
+
+    removeResource(groupId, resourceId, now = new Date()) {
+      return transaction(() => {
+        const resource = db.prepare(`
+          SELECT r.name, r.resource_type AS type, g.name AS groupName
+          FROM managed_resources r JOIN managed_groups g ON g.id = r.group_id
+          WHERE r.id = ? AND r.group_id = ?
+        `).get(resourceId, groupId);
+        if (!resource) return false;
+        db.prepare('DELETE FROM managed_resources WHERE id = ? AND group_id = ?').run(resourceId, groupId);
+        const remaining = db.prepare(`
+          SELECT id FROM managed_resources WHERE group_id = ? ORDER BY position, created_at
+        `).all(groupId);
+        remaining.forEach((item, index) => {
+          db.prepare('UPDATE managed_resources SET position = ? WHERE id = ?').run(index, item.id);
+        });
+        db.prepare('UPDATE managed_groups SET updated_at = ? WHERE id = ?').run(iso(now), groupId);
+        db.prepare(`
+          UPDATE managed_users
+          SET policy_revision = policy_revision + 1, updated_at = ?
+          WHERE group_id = ?
+        `).run(iso(now), groupId);
+        audit(
+          `${resource.type}.removed`,
+          `Removed ${resource.name} from ${resource.groupName}`,
+          'group',
+          groupId,
+          now,
+        );
+        return true;
+      });
+    },
+
+    reorderResources(groupId, resourceIds, now = new Date()) {
+      return transaction(() => {
+        const group = getGroup(groupId);
+        if (!group) return null;
+        const existingIds = group.resources.map((resource) => resource.id);
+        if (resourceIds.length !== existingIds.length ||
+            new Set(resourceIds).size !== resourceIds.length ||
+            resourceIds.some((id) => !existingIds.includes(id))) {
+          throw Object.assign(new Error('Resource order must include every group resource exactly once'), { statusCode: 400 });
+        }
+        resourceIds.forEach((id, position) => {
+          db.prepare('UPDATE managed_resources SET position = ? WHERE id = ? AND group_id = ?')
+            .run(position, id, groupId);
+        });
+        db.prepare('UPDATE managed_groups SET updated_at = ? WHERE id = ?').run(iso(now), groupId);
+        db.prepare(`
+          UPDATE managed_users
+          SET policy_revision = policy_revision + 1, updated_at = ?
+          WHERE group_id = ?
+        `).run(iso(now), groupId);
+        audit('group.reordered', `Reordered resources in ${group.name}`, 'group', groupId, now);
+        return getGroup(groupId);
+      });
     },
 
     addAddon(userId, addon, now = new Date()) {
@@ -261,6 +522,7 @@ export function openDatabase(databasePath) {
         const user = getUser(userId);
         if (!pairing || !user) return null;
         if (!user.enabled) throw Object.assign(new Error('Managed user is disabled'), { statusCode: 409 });
+        if (!user.groupId) throw Object.assign(new Error('Managed user has no addon group'), { statusCode: 409 });
         if (pairing.status !== 'pending') {
           throw Object.assign(new Error('Pairing request is no longer pending'), { statusCode: 409 });
         }
@@ -300,17 +562,25 @@ export function openDatabase(databasePath) {
         SELECT d.id, d.user_id AS userId, d.name, d.platform, d.app_version AS appVersion,
                d.paired_at AS pairedAt, d.last_seen_at AS lastSeenAt, d.revoked_at AS revokedAt,
                u.name AS userName, u.enabled AS userEnabled,
-               u.policy_revision AS policyRevision, u.updated_at AS policyUpdatedAt
+               u.group_id AS groupId, u.policy_revision AS policyRevision,
+               u.updated_at AS policyUpdatedAt
         FROM devices d JOIN managed_users u ON u.id = d.user_id
         WHERE d.token_hash = ?
       `).get(tokenHash);
       if (!device) return null;
       if (device.revokedAt || !device.userEnabled) return { revoked: true };
       db.prepare('UPDATE devices SET last_seen_at = ? WHERE id = ?').run(iso(now), device.id);
-      const addons = rowsToPlain(db.prepare(`
-        SELECT id, name, manifest_url AS manifestUrl
-        FROM managed_addons WHERE user_id = ? ORDER BY position, created_at
-      `).all(device.userId));
+      const resources = device.groupId ? rowsToPlain(db.prepare(`
+        SELECT id, resource_type AS type, name, manifest_url AS manifestUrl,
+               collection_json AS collectionJson
+        FROM managed_resources WHERE group_id = ? ORDER BY position, created_at
+      `).all(device.groupId)) : [];
+      const addons = resources
+        .filter((resource) => resource.type === 'addon')
+        .map(({ id, name, manifestUrl }) => ({ id, name, manifestUrl }));
+      const collections = resources
+        .filter((resource) => resource.type === 'collection')
+        .map(({ id, name, collectionJson }) => ({ id, name, json: collectionJson }));
       return {
         revoked: false,
         device: { id: device.id, name: device.name },
@@ -319,6 +589,7 @@ export function openDatabase(databasePath) {
           revision: device.policyRevision,
           updatedAt: device.policyUpdatedAt,
           addons,
+          collections,
         },
       };
     },
