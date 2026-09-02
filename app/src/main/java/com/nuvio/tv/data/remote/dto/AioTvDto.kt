@@ -20,7 +20,6 @@ data class AioTvApiError(
 data class AioTvDeviceStartData(
     val deviceCode: String,
     val userCode: String,
-    val verificationUri: String,
     val expiresIn: Int,
     val interval: Int
 )
@@ -36,26 +35,33 @@ data class AioTvDeviceTokenData(
     val interval: Int? = null,
     val accessToken: String? = null,
     val tokenType: String? = null,
-    val expiresIn: Int? = null,
-    val configUuid: String? = null
+    val deviceId: String? = null
 )
 
 @JsonClass(generateAdapter = true)
 data class AioTvBootstrapData(
-    val account: AioTvBootstrapAccount,
+    val device: AioTvBootstrapDevice,
+    val profile: AioTvBootstrapProfile,
     val policy: AioTvBootstrapPolicy,
     val management: AioTvManagementPolicy
 )
 
 @JsonClass(generateAdapter = true)
-data class AioTvBootstrapAccount(
-    val uuid: String
+data class AioTvBootstrapDevice(
+    val id: String,
+    val name: String
+)
+
+@JsonClass(generateAdapter = true)
+data class AioTvBootstrapProfile(
+    val id: String,
+    val name: String
 )
 
 @JsonClass(generateAdapter = true)
 data class AioTvBootstrapPolicy(
     val revision: Int,
-    val updatedAt: Long,
+    val updatedAt: String,
     val addons: List<AioTvManagedAddon> = emptyList()
 )
 

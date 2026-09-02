@@ -33,10 +33,16 @@ class AioTvPolicyRefreshViewModel @Inject constructor(
                         message = "Assigned addons refreshed (policy revision ${result.data.policy.revision})."
                     )
                 }
+                is AioTvManagedAccountRepository.BootstrapResult.OfflineReady -> {
+                    AioTvPolicyRefreshState(
+                        message = "AIOtv Control is offline. Using the last verified assignments " +
+                            "(policy revision ${result.policyRevision})."
+                    )
+                }
                 AioTvManagedAccountRepository.BootstrapResult.NoSession,
                 AioTvManagedAccountRepository.BootstrapResult.Revoked -> {
                     AioTvPolicyRefreshState(
-                        message = "This TV is no longer paired. Restart AIOtv to sign in again.",
+                        message = "This TV is no longer paired. Restart AIOtv to request a new code.",
                         isError = true
                     )
                 }

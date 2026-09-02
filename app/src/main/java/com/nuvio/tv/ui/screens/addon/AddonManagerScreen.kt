@@ -47,7 +47,7 @@ import com.nuvio.tv.ui.theme.NuvioTheme
 /**
  * AIOtv's addon screen is intentionally informational rather than an addon
  * installer. The central account-management service owns the manifest set for
- * each signed-in account. Users can refresh that assignment and control how
+ * each managed user. Users can refresh that assignment and control how
  * the resulting catalogs appear on Home, but cannot alter the addon set.
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -83,7 +83,7 @@ fun AddonManagerScreen(
                 )
                 Spacer(modifier = Modifier.height(NuvioTheme.spacing.sm))
                 Text(
-                    text = "Addons are assigned to this account by the AIOtv administrator. You can refresh assignments and customise catalog order, but addon installation and removal are locked.",
+                    text = "Addons are assigned to this TV by the AIOtv administrator. You can refresh assignments and customise catalog order, but addon installation and removal are locked.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = NuvioTheme.colors.TextSecondary
                 )

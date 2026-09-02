@@ -19,7 +19,6 @@ sealed interface AioTvGateState {
     data class Pairing(
         val deviceCode: String,
         val userCode: String,
-        val verificationUri: String,
         val expiresAtEpochMs: Long,
         val pollIntervalSeconds: Int
     ) : AioTvGateState
@@ -61,6 +60,7 @@ class AioTvGateViewModel @Inject constructor(
             _state.value = AioTvGateState.Loading
             when (val result = repository.restoreAndBootstrap()) {
                 is AioTvManagedAccountRepository.BootstrapResult.Ready -> markReady()
+                is AioTvManagedAccountRepository.BootstrapResult.OfflineReady -> markReady()
                 AioTvManagedAccountRepository.BootstrapResult.NoSession,
                 AioTvManagedAccountRepository.BootstrapResult.Revoked -> startPairing()
                 is AioTvManagedAccountRepository.BootstrapResult.Failed -> {
@@ -84,7 +84,6 @@ class AioTvGateViewModel @Inject constructor(
         _state.value = AioTvGateState.Pairing(
             deviceCode = start.deviceCode,
             userCode = start.userCode,
-            verificationUri = start.verificationUri,
             expiresAtEpochMs = expiresAt,
             pollIntervalSeconds = intervalSeconds
         )
@@ -103,6 +102,7 @@ class AioTvGateViewModel @Inject constructor(
                     _state.value = AioTvGateState.Loading
                     when (val bootstrap = repository.bootstrapAndReconcile(poll.session)) {
                         is AioTvManagedAccountRepository.BootstrapResult.Ready -> markReady()
+                        is AioTvManagedAccountRepository.BootstrapResult.OfflineReady -> markReady()
                         AioTvManagedAccountRepository.BootstrapResult.Revoked,
                         AioTvManagedAccountRepository.BootstrapResult.NoSession -> {
                             startPairing()
@@ -132,9 +132,9 @@ class AioTvGateViewModel @Inject constructor(
     }
 
     /**
-     * AIOtv owns authentication in this distribution. Mark Nuvio's legacy
+     * AIOtv Control owns pairing in this distribution. Mark Nuvio's legacy
      * first-launch account QR as completed before entering MainActivity so the
-     * user is never asked to sign into a second account system after Pocket ID.
+     * user is never asked to sign into a second account system.
      */
     private suspend fun markReady() {
         appOnboardingDataStore.setHasSeenAuthQrOnFirstLaunch(true)

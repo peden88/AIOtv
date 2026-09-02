@@ -11,9 +11,9 @@ package com.nuvio.tv.core.aio
 object AioProductPolicy {
     const val FIXED_APPEARANCE = true
 
-    // Pocket ID + the administrator-owned AIOStreams binding is the only
-    // account model exposed by AIOtv. Upstream Nuvio account/profile controls
-    // remain internal implementation details and are not user-manageable.
+    // AIOtv Control's administrator-approved device binding is the only account
+    // model exposed by AIOtv. Upstream Nuvio account/profile controls remain
+    // internal implementation details and are not user-manageable.
     const val USER_CAN_ACCESS_NUVIO_ACCOUNT = false
     const val USER_CAN_MANAGE_NUVIO_PROFILES = false
 

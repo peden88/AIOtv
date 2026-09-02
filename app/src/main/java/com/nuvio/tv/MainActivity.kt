@@ -138,6 +138,7 @@ import com.nuvio.tv.data.local.LayoutPreferenceDataStore
 import com.nuvio.tv.data.local.StartupAuthNotice
 import com.nuvio.tv.data.local.ThemeDataStore
 import com.nuvio.tv.data.repository.MemberAccessRepository
+import com.nuvio.tv.data.repository.AioTvManagedAccountRepository
 import com.nuvio.tv.data.remote.supabase.AvatarRepository
 import com.nuvio.tv.domain.model.AppFont
 import com.nuvio.tv.domain.model.AppTheme
@@ -181,9 +182,11 @@ import dev.chrisbanes.haze.haze
 import java.util.Locale
 import javax.inject.Inject
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 val LocalSidebarExpanded = compositionLocalOf { false }
@@ -192,6 +195,8 @@ val LocalContentFocusRequester = compositionLocalOf { FocusRequester.Default }
 private const val SIDEBAR_AUTO_COLLAPSE_DELAY_MS = 4_000L
 
 private const val MAX_SUPPORTED_FONT_SCALE = 1.15f
+
+private const val AIO_POLICY_REFRESH_INTERVAL_MS = 15L * 60L * 1000L
 
 data class DrawerItem(
     val route: String,
@@ -238,6 +243,9 @@ open class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var addonRepository: AddonRepository
+
+    @Inject
+    lateinit var aioTvManagedAccountRepository: AioTvManagedAccountRepository
 
     @Inject
     lateinit var trackingProgressRefreshCoordinator: TrackingProgressRefreshCoordinator
@@ -293,6 +301,8 @@ open class MainActivity : ComponentActivity() {
 
     /** True until the first onResume after onCreate completes. */
     private var isFirstResumeAfterCreate = false
+
+    private var aioPolicyRefreshJob: Job? = null
 
     @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalFoundationApi::class)
     override fun attachBaseContext(newBase: Context) {
@@ -1108,15 +1118,45 @@ open class MainActivity : ComponentActivity() {
         super.onStart()
         startupSyncService.startPeriodicSurfacePulls()
         androidTvChannelSyncService.onForegroundChanged(true)
+        aioPolicyRefreshJob?.cancel()
+        aioPolicyRefreshJob = lifecycleScope.launch {
+            reconcileManagedPolicy()
+            while (isActive) {
+                delay(AIO_POLICY_REFRESH_INTERVAL_MS)
+                reconcileManagedPolicy()
+            }
+        }
     }
 
     override fun onStop() {
+        aioPolicyRefreshJob?.cancel()
+        aioPolicyRefreshJob = null
         externalPlaybackTracker.onExternalPlayerCoveredApp()
         super.onStop()
         startupSyncService.stopPeriodicSurfacePulls()
         // App going to background (e.g. user returning to the launcher): reconcile the
         // Continue Watching channel once so Projectivy repaints it with fresh progress.
         androidTvChannelSyncService.onForegroundChanged(false)
+    }
+
+    private suspend fun reconcileManagedPolicy() {
+        when (aioTvManagedAccountRepository.refreshIfStale()) {
+            AioTvManagedAccountRepository.BootstrapResult.NoSession,
+            AioTvManagedAccountRepository.BootstrapResult.Revoked -> {
+                if (!isFinishing) {
+                    startActivity(
+                        Intent(this, AioTvGateActivity::class.java).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                        }
+                    )
+                    finish()
+                }
+            }
+            null,
+            is AioTvManagedAccountRepository.BootstrapResult.Ready,
+            is AioTvManagedAccountRepository.BootstrapResult.OfflineReady,
+            is AioTvManagedAccountRepository.BootstrapResult.Failed -> Unit
+        }
     }
 
     override fun onDestroy() {
