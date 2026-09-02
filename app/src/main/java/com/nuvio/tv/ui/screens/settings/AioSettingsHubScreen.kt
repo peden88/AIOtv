@@ -44,6 +44,7 @@ import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.nuvio.tv.ui.aiotv.brand.AioBrandGlyph
 import com.nuvio.tv.ui.aiotv.design.AioColors
 import com.nuvio.tv.ui.aiotv.design.AioRadii
 import com.nuvio.tv.ui.aiotv.design.AioSpacing
@@ -55,10 +56,7 @@ private data class AioSettingsDestination(
     val onClick: () -> Unit
 )
 
-/**
- * AIOtv deliberately treats Settings as navigation, not as an accordion/dashboard.
- * Every row opens a full screen and Back returns to this menu at the same position.
- */
+/** AIOtv Settings is navigation, not an accordion/dashboard. */
 @Composable
 fun AioSettingsHubScreen(
     onBackPress: () -> Unit,
@@ -82,72 +80,46 @@ fun AioSettingsHubScreen(
         onNavigateToAbout
     ) {
         listOf(
-            AioSettingsDestination(
-                title = "Language",
-                subtitle = "Interface language and regional display",
-                icon = Icons.Default.Language,
-                onClick = onNavigateToAppearance
-            ),
-            AioSettingsDestination(
-                title = "Home & layout",
-                subtitle = "Catalog presentation, posters and home behaviour",
-                icon = Icons.Default.GridView,
-                onClick = onNavigateToLayout
-            ),
-            AioSettingsDestination(
-                title = "Content",
-                subtitle = "View the addons and catalogs assigned to this account",
-                icon = Icons.Default.Tune,
-                onClick = onNavigateToAddons
-            ),
-            AioSettingsDestination(
-                title = "Playback",
-                subtitle = "Player, autoplay, audio, subtitles and skipping",
-                icon = Icons.Default.PlayArrow,
-                onClick = onNavigateToPlayback
-            ),
-            AioSettingsDestination(
-                title = "Tracking",
-                subtitle = "Watch progress and external tracking providers",
-                icon = Icons.Default.Sync,
-                onClick = onNavigateToTracking
-            ),
-            AioSettingsDestination(
-                title = "Advanced",
-                subtitle = "Network, diagnostics, cache and device behaviour",
-                icon = Icons.Default.Settings,
-                onClick = onNavigateToAdvanced
-            ),
-            AioSettingsDestination(
-                title = "About AIOtv",
-                subtitle = "Version, licences and project information",
-                icon = Icons.Default.Info,
-                onClick = onNavigateToAbout
-            )
+            AioSettingsDestination("Language", "Interface language and regional display", Icons.Default.Language, onNavigateToAppearance),
+            AioSettingsDestination("Home & layout", "Catalog presentation, posters and home behaviour", Icons.Default.GridView, onNavigateToLayout),
+            AioSettingsDestination("Content", "View the addons and catalogs assigned to this account", Icons.Default.Tune, onNavigateToAddons),
+            AioSettingsDestination("Playback", "Player, autoplay, audio, subtitles and skipping", Icons.Default.PlayArrow, onNavigateToPlayback),
+            AioSettingsDestination("Tracking", "Watch progress and external tracking providers", Icons.Default.Sync, onNavigateToTracking),
+            AioSettingsDestination("Advanced", "Network, diagnostics, cache and device behaviour", Icons.Default.Settings, onNavigateToAdvanced),
+            AioSettingsDestination("About AIOtv", "Version, licences and project information", Icons.Default.Info, onNavigateToAbout)
         )
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(
-                horizontal = AioSpacing.ScreenHorizontal,
-                vertical = AioSpacing.ScreenVertical
-            )
+            .padding(horizontal = AioSpacing.ScreenHorizontal, vertical = AioSpacing.ScreenVertical)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            Text(
-                text = "Settings",
-                style = MaterialTheme.typography.displaySmall,
-                color = AioColors.TextPrimary,
-                fontWeight = FontWeight.SemiBold
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Choose a section. Each section opens as its own page.",
-                style = MaterialTheme.typography.bodyLarge,
-                color = AioColors.TextSecondary
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Settings",
+                        style = MaterialTheme.typography.displaySmall,
+                        color = AioColors.TextPrimary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "AIOtv preferences and device behaviour",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = AioColors.TextSecondary
+                    )
+                }
+                AioBrandGlyph(
+                    modifier = Modifier.size(width = 92.dp, height = 58.dp),
+                    contentDescription = null,
+                    alpha = 0.66f
+                )
+            }
             Spacer(modifier = Modifier.height(AioSpacing.Section))
 
             LazyColumn(
@@ -180,14 +152,8 @@ private fun AioSettingsRow(destination: AioSettingsDestination) {
         shape = CardDefaults.shape(shape),
         scale = CardDefaults.scale(focusedScale = 1.01f, pressedScale = 0.995f),
         border = CardDefaults.border(
-            border = Border(
-                border = BorderStroke(1.dp, AioColors.Divider),
-                shape = shape
-            ),
-            focusedBorder = Border(
-                border = BorderStroke(2.dp, AioColors.FocusBorder),
-                shape = shape
-            )
+            border = Border(BorderStroke(1.dp, AioColors.Divider), shape),
+            focusedBorder = Border(BorderStroke(2.dp, AioColors.FocusBorder), shape)
         )
     ) {
         Row(
@@ -196,10 +162,7 @@ private fun AioSettingsRow(destination: AioSettingsDestination) {
                 .padding(horizontal = 22.dp, vertical = 17.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier.size(38.dp),
-                contentAlignment = Alignment.Center
-            ) {
+            Box(modifier = Modifier.size(38.dp), contentAlignment = Alignment.Center) {
                 Icon(
                     imageVector = destination.icon,
                     contentDescription = null,
