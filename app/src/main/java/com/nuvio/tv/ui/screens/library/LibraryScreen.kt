@@ -301,7 +301,7 @@ fun LibraryScreen(
                         viewMode == LibraryViewMode.Cloud -> stringResource(R.string.library_source_cloud).uppercase()
                         uiState.sourceMode == LibrarySourceMode.TRAKT -> "TRAKT"
                         uiState.sourceMode == LibrarySourceMode.SIMKL -> "SIMKL"
-                        uiState.isNuvioAccount -> "NUVIO"
+                        uiState.isNuvioAccount -> "AIOtv"
                         else -> stringResource(R.string.library_source_local)
                     },
                     style = MaterialTheme.typography.labelLarge,

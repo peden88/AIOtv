@@ -22,6 +22,9 @@ import javax.inject.Inject
 
 enum class ImportMode { PASTE, FILE, URL }
 
+internal const val COLLECTIONS_EXPORT_FILENAME = "aiotv-collections.json"
+private const val LEGACY_COLLECTIONS_EXPORT_FILENAME = "nuvio-collections.json"
+
 data class CollectionManagementUiState(
     val collections: List<Collection> = emptyList(),
     val isLoading: Boolean = true,
@@ -306,21 +309,25 @@ class CollectionManagementViewModel @Inject constructor(
         val uri = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
         val projection = arrayOf(android.provider.MediaStore.Downloads._ID)
         val selection = "${android.provider.MediaStore.Downloads.DISPLAY_NAME} = ?"
-        val selectionArgs = arrayOf("nuvio-collections.json")
-        return resolver.query(uri, projection, selection, selectionArgs, null)?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                val id = cursor.getLong(cursor.getColumnIndexOrThrow(android.provider.MediaStore.Downloads._ID))
-                val fileUri = android.content.ContentUris.withAppendedId(uri, id)
-                resolver.openInputStream(fileUri)?.bufferedReader()?.readText()
-            } else null
-        }
+        return listOf(COLLECTIONS_EXPORT_FILENAME, LEGACY_COLLECTIONS_EXPORT_FILENAME)
+            .firstNotNullOfOrNull { filename ->
+                resolver.query(uri, projection, selection, arrayOf(filename), null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val id = cursor.getLong(cursor.getColumnIndexOrThrow(android.provider.MediaStore.Downloads._ID))
+                        val fileUri = android.content.ContentUris.withAppendedId(uri, id)
+                        resolver.openInputStream(fileUri)?.bufferedReader()?.readText()
+                    } else null
+                }
+            }
     }
 
     private fun loadFromDownloadsDirectory(): String? {
         val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(
             android.os.Environment.DIRECTORY_DOWNLOADS
         )
-        val file = java.io.File(downloadsDir, "nuvio-collections.json")
-        return if (file.exists()) file.readText() else null
+        return listOf(COLLECTIONS_EXPORT_FILENAME, LEGACY_COLLECTIONS_EXPORT_FILENAME)
+            .map { filename -> java.io.File(downloadsDir, filename) }
+            .firstOrNull(java.io.File::exists)
+            ?.readText()
     }
 }

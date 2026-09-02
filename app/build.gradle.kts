@@ -153,6 +153,7 @@ android {
     productFlavors {
         create("full") {
             dimension = "distribution"
+            buildConfigField("boolean", "FEATURE_MANAGED_BUILD", "false")
             buildConfigField("boolean", "FEATURE_PLUGINS_ENABLED", "true")
             buildConfigField("boolean", "FEATURE_IN_APP_UPDATES_ENABLED", "true")
             buildConfigField("boolean", "FEATURE_IN_APP_TRAILERS_ENABLED", "true")
@@ -163,11 +164,23 @@ android {
         create("playstore") {
             dimension = "distribution"
             applicationId = "com.nuvio.app"
+            buildConfigField("boolean", "FEATURE_MANAGED_BUILD", "false")
             buildConfigField("boolean", "FEATURE_PLUGINS_ENABLED", "false")
             buildConfigField("boolean", "FEATURE_IN_APP_UPDATES_ENABLED", "false")
             buildConfigField("boolean", "FEATURE_IN_APP_TRAILERS_ENABLED", "false")
             buildConfigField("boolean", "FEATURE_EXTERNAL_TRAILERS_ENABLED", "true")
             buildConfigField("boolean", "FEATURE_EXTERNAL_PLAYBACK_KEEP_ALIVE_ENABLED", "false")
+            buildConfigField("boolean", "FEATURE_CUSTOM_SERVER_CONNECTIONS_ENABLED", "false")
+        }
+        create("managed") {
+            dimension = "distribution"
+            applicationId = "com.aiotv.tv"
+            buildConfigField("boolean", "FEATURE_MANAGED_BUILD", "true")
+            buildConfigField("boolean", "FEATURE_PLUGINS_ENABLED", "false")
+            buildConfigField("boolean", "FEATURE_IN_APP_UPDATES_ENABLED", "false")
+            buildConfigField("boolean", "FEATURE_IN_APP_TRAILERS_ENABLED", "true")
+            buildConfigField("boolean", "FEATURE_EXTERNAL_TRAILERS_ENABLED", "true")
+            buildConfigField("boolean", "FEATURE_EXTERNAL_PLAYBACK_KEEP_ALIVE_ENABLED", "true")
             buildConfigField("boolean", "FEATURE_CUSTOM_SERVER_CONNECTIONS_ENABLED", "false")
         }
     }
@@ -334,7 +347,14 @@ android {
 androidComponents {
     onVariants(selector().withBuildType("debug")) { variant ->
         val isPlaystore = variant.productFlavors.any { it.second == "playstore" }
-        variant.applicationId.set(if (isPlaystore) "com.nuvio.appdebug" else "com.nuviodebug.com")
+        val isManaged = variant.productFlavors.any { it.second == "managed" }
+        variant.applicationId.set(
+            when {
+                isManaged -> "com.aiotv.tv"
+                isPlaystore -> "com.nuvio.appdebug"
+                else -> "com.nuviodebug.com"
+            }
+        )
     }
 }
 

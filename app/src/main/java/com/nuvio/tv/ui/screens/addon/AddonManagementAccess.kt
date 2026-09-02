@@ -1,13 +1,15 @@
 package com.nuvio.tv.ui.screens.addon
 
 import com.nuvio.tv.core.server.AddonWebConfigMode
+import com.nuvio.tv.core.build.AppFeaturePolicy
 import com.nuvio.tv.domain.model.ExperienceMode
 import com.nuvio.tv.domain.model.UserProfile
 
 internal object AddonManagementAccess {
 
     fun isReadOnly(profile: UserProfile?): Boolean {
-        return profile?.let { !it.isPrimary && it.usesPrimaryAddons } == true
+        return !AppFeaturePolicy.addonManagementEnabled ||
+            profile?.let { !it.isPrimary && it.usesPrimaryAddons } == true
     }
 
     fun webConfigMode(

@@ -118,7 +118,7 @@ object NetworkModule {
             .addInterceptor { chain ->
                 val version = BuildConfig.VERSION_NAME.ifBlank { "dev" }
                 val request = chain.request().newBuilder()
-                    .header("User-Agent", "Nuvio/$version")
+                    .header("User-Agent", "AIOtv/$version")
                     .header("Accept-Language", buildAcceptLanguageHeader())
                     .build()
                 chain.proceed(request)
@@ -152,7 +152,7 @@ object NetworkModule {
         .addInterceptor { chain ->
             val version = BuildConfig.VERSION_NAME.ifBlank { "dev" }
             val request = chain.request().newBuilder()
-                .header("User-Agent", "Nuvio/$version")
+                .header("User-Agent", "AIOtv/$version")
                 .header("Accept-Language", buildAcceptLanguageHeader())
                 .build()
             chain.proceed(request)
@@ -174,7 +174,7 @@ object NetworkModule {
             .addInterceptor { chain ->
                 val version = BuildConfig.VERSION_NAME.ifBlank { "dev" }
                 val request = chain.request().newBuilder()
-                    .header("User-Agent", "Nuvio/$version")
+                    .header("User-Agent", "AIOtv/$version")
                     .header("Accept-Language", buildAcceptLanguageHeader())
                     .build()
                 chain.proceed(request)
@@ -225,7 +225,7 @@ object NetworkModule {
             val version = BuildConfig.VERSION_NAME.ifBlank { "dev" }
             val newRequest = request.newBuilder()
                 .header("Content-Type", "application/json")
-                .header("User-Agent", "Nuvio/$version")
+                .header("User-Agent", "AIOtv/$version")
                 .header("trakt-api-key", BuildConfig.TRAKT_CLIENT_ID)
                 .header("trakt-api-version", "2")
                 .build()

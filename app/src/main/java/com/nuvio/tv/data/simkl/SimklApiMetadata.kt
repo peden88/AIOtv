@@ -46,4 +46,4 @@ fun defaultSimklApiConfiguration(): SimklApiConfiguration = SimklApiConfiguratio
 )
 
 private val SIMKL_REQUIRED_QUERY_KEYS = setOf("client_id", "app-name", "app-version")
-private const val SIMKL_USER_AGENT_APP_NAME = "NuvioTV"
+private const val SIMKL_USER_AGENT_APP_NAME = "AIOtv"

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="280" viewBox="0 0 1200 280">
+  <defs>
+    <linearGradient id="band" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#383c40" stop-opacity="0"/>
+      <stop offset="0.2" stop-color="#72777c" stop-opacity="0.78"/>
+      <stop offset="0.5" stop-color="#e0e2e4"/>
+      <stop offset="0.8" stop-color="#72777c" stop-opacity="0.78"/>
+      <stop offset="1" stop-color="#383c40" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="word" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#eceeef"/>
+      <stop offset="0.48" stop-color="#c3c6c9"/>
+      <stop offset="1" stop-color="#74797e"/>
+    </linearGradient>
+    <filter id="soft" x="-20%" y="-60%" width="140%" height="220%">
+      <feGaussianBlur stdDeviation="5"/>
+    </filter>
+  </defs>
+  <g transform="translate(10,4)">
+    <path d="M20 139 C75 77 150 64 230 68 C300 72 346 93 390 132" fill="none" stroke="url(#band)" stroke-width="14" opacity="0.35" filter="url(#soft)"/>
+    <path d="M20 140 C81 89 150 80 230 83 C295 86 346 103 390 135" fill="none" stroke="url(#band)" stroke-width="7" opacity="0.9"/>
+    <ellipse cx="220" cy="128" rx="76" ry="49" fill="#010101" stroke="#3b3f43" stroke-width="2"/>
+    <path d="M20 145 C86 174 152 182 220 180 C289 178 346 164 390 139" fill="none" stroke="url(#band)" stroke-width="15" opacity="0.34" filter="url(#soft)"/>
+    <path d="M20 144 C88 164 153 171 220 169 C288 167 346 156 390 138" fill="none" stroke="url(#band)" stroke-width="7" opacity="0.94"/>
+  </g>
+  <text x="430" y="206" fill="url(#word)" font-family="DejaVu Sans, sans-serif" font-size="190" font-weight="700" letter-spacing="-11">AIO<tspan font-weight="500">tv</tspan></text>
+</svg>

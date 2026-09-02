@@ -63,6 +63,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.LocaleCache
 import com.nuvio.tv.R
+import com.nuvio.tv.core.build.AppFeaturePolicy
 import com.nuvio.tv.domain.model.AppIconOption
 import com.nuvio.tv.domain.model.AppTheme
 import com.nuvio.tv.domain.model.SettingsUiStyle
@@ -259,21 +260,23 @@ fun ThemeSettingsContent(
                 }
             }
 
-            SettingsGroupCard(
-                modifier = Modifier.fillMaxWidth(),
-                title = stringResource(R.string.appearance_launcher_artwork),
-                subtitle = stringResource(R.string.appearance_launcher_artwork_subtitle)
-            ) {
-                SettingsActionRow(
-                    title = stringResource(R.string.appearance_app_icon_and_banner),
-                    subtitle = stringResource(R.string.appearance_app_icon_and_banner_subtitle),
-                    value = appIconState.selected.localizedName(),
-                    enabled = appIconState.pending == null,
-                    onClick = {
-                        viewModel.onEvent(ThemeSettingsEvent.DismissAppIconFailure)
-                        showAppIconDialog = true
-                    }
-                )
+            if (AppFeaturePolicy.appIconPickerEnabled) {
+                SettingsGroupCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    title = stringResource(R.string.appearance_launcher_artwork),
+                    subtitle = stringResource(R.string.appearance_launcher_artwork_subtitle)
+                ) {
+                    SettingsActionRow(
+                        title = stringResource(R.string.appearance_app_icon_and_banner),
+                        subtitle = stringResource(R.string.appearance_app_icon_and_banner_subtitle),
+                        value = appIconState.selected.localizedName(),
+                        enabled = appIconState.pending == null,
+                        onClick = {
+                            viewModel.onEvent(ThemeSettingsEvent.DismissAppIconFailure)
+                            showAppIconDialog = true
+                        }
+                    )
+                }
             }
 
             SettingsGroupCard(
@@ -340,7 +343,7 @@ fun ThemeSettingsContent(
         )
     }
 
-    if (showAppIconDialog && appIconConfirmation == null) {
+    if (AppFeaturePolicy.appIconPickerEnabled && showAppIconDialog && appIconConfirmation == null) {
         AppIconPickerDialog(
             state = appIconState,
             onSelected = { option ->

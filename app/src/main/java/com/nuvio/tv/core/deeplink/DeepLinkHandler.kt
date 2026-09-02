@@ -2,6 +2,7 @@ package com.nuvio.tv.core.deeplink
 
 import android.content.Context
 import com.nuvio.tv.R
+import com.nuvio.tv.core.build.AppFeaturePolicy
 import com.nuvio.tv.core.network.NetworkResult
 import com.nuvio.tv.domain.repository.AddonRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -12,6 +13,9 @@ class DeepLinkHandler @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     suspend fun installAddon(manifestUrl: String): DeepLinkInstallResult {
+        if (!AppFeaturePolicy.addonManagementEnabled) {
+            return DeepLinkInstallResult.Error(context.getString(R.string.managed_addons_locked))
+        }
         return when (val result = addonRepository.fetchAddon(manifestUrl)) {
             is NetworkResult.Success -> {
                 addonRepository.addAddon(manifestUrl)

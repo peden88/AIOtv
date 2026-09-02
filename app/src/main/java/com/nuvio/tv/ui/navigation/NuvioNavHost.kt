@@ -1150,6 +1150,7 @@ fun NuvioNavHost(
                 showBuiltInHeader = !hideBuiltInHeaders,
                 onNavigateToTracking = { navController.navigate(Screen.Tracking.route) },
                 onNavigateToAddons = { navController.navigate(Screen.AddonManager.route) },
+                onNavigateToCollections = { navController.navigate(Screen.Collections.route) },
                 onNavigateToPlugins = { navController.navigate(Screen.Plugins.route) },
                 onNavigateToAuthQrSignIn = { navController.navigate(Screen.AuthQrSignIn.route) },
                 onNavigateToManageProfiles = { navController.navigate(Screen.ManageProfiles.route) },
@@ -1220,19 +1221,21 @@ fun NuvioNavHost(
             )
         }
 
-        composable(Screen.AddonManager.route) {
-            AddonManagerScreen(
-                showBuiltInHeader = !hideBuiltInHeaders,
-                onBackPress = { navController.popBackStack() },
-                onNavigateToCatalogOrder = { navController.navigate(Screen.CatalogOrder.route) },
-                onNavigateToCollections = { navController.navigate(Screen.Collections.route) }
-            )
-        }
+        if (AppFeaturePolicy.addonManagementEnabled) {
+            composable(Screen.AddonManager.route) {
+                AddonManagerScreen(
+                    showBuiltInHeader = !hideBuiltInHeaders,
+                    onBackPress = { navController.popBackStack() },
+                    onNavigateToCatalogOrder = { navController.navigate(Screen.CatalogOrder.route) },
+                    onNavigateToCollections = { navController.navigate(Screen.Collections.route) }
+                )
+            }
 
-        composable(Screen.CatalogOrder.route) {
-            CatalogOrderScreen(
-                onBackPress = { navController.popBackStack() }
-            )
+            composable(Screen.CatalogOrder.route) {
+                CatalogOrderScreen(
+                    onBackPress = { navController.popBackStack() }
+                )
+            }
         }
 
         composable(Screen.Collections.route) {

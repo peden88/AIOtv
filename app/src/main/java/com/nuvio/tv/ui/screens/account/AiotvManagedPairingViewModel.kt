@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.gson.JsonParser
 import com.nuvio.tv.domain.repository.AddonRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.io.IOException
 import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
@@ -14,7 +15,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -42,6 +42,7 @@ class AiotvManagedPairingViewModel @Inject constructor(
         private const val KEY_DEVICE_ID = "device_id"
         private const val KEY_TOKEN = "device_token"
         private const val KEY_USER = "managed_user"
+        private const val KEY_CONFIG_FINGERPRINT = "config_fingerprint"
         private const val POLL_DELAY_MS = 2_000L
     }
 
@@ -67,7 +68,25 @@ class AiotvManagedPairingViewModel @Inject constructor(
         viewModelScope.launch {
             _state.value = AiotvPairingState.Starting
             runCatching {
-                requestPairing()
+                val storedToken = preferences.getString(KEY_TOKEN, null)
+                if (storedToken.isNullOrBlank()) {
+                    requestPairing()
+                } else {
+                    try {
+                        applyManagedConfiguration(
+                            token = storedToken,
+                            fallbackUserName = preferences.getString(KEY_USER, null)
+                                ?: "Managed user"
+                        )
+                    } catch (error: ControlApiException) {
+                        if (error.code == 401 || error.code == 403 || error.code == 404) {
+                            clearManagedSession()
+                            requestPairing()
+                        } else {
+                            throw error
+                        }
+                    }
+                }
             }.onFailure {
                 _state.value = AiotvPairingState.Error(it.message ?: "Unable to contact AIOtv Control")
             }
@@ -82,16 +101,18 @@ class AiotvManagedPairingViewModel @Inject constructor(
             .post(body)
             .build()
 
-        client.newCall(request).execute().use { response ->
+        val responseData = client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) error("Pairing request failed (${response.code})")
             val json = JsonParser.parseString(response.body?.string().orEmpty()).asJsonObject
             val code = json.get("pairing_code")?.asString ?: error("Control server returned no pairing code")
             val token = json.get("device_token")?.asString ?: error("Control server returned no device token")
             val expiresIn = json.get("expires_in")?.asInt ?: 900
-            preferences.edit().putString(KEY_TOKEN, token).apply()
-            _state.value = AiotvPairingState.Waiting(code, expiresIn)
-            pollPairing(code, token)
+            Triple(code, token, expiresIn)
         }
+        val (code, token, expiresIn) = responseData
+        preferences.edit().putString(KEY_TOKEN, token).apply()
+        _state.value = AiotvPairingState.Waiting(code, expiresIn)
+        pollPairing(code, token)
     }
 
     private suspend fun pollPairing(code: String, token: String) {
@@ -126,7 +147,7 @@ class AiotvManagedPairingViewModel @Inject constructor(
         }
     }
 
-    private suspend fun applyManagedConfiguration(token: String, userName: String) {
+    private suspend fun applyManagedConfiguration(token: String, fallbackUserName: String) {
         val config = withContext(Dispatchers.IO) {
             val request = Request.Builder()
                 .url("$BASE_URL/device/config?device_id=${java.net.URLEncoder.encode(deviceId, "UTF-8")}")
@@ -134,10 +155,22 @@ class AiotvManagedPairingViewModel @Inject constructor(
                 .get()
                 .build()
             client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) error("Managed configuration failed (${response.code})")
+                if (!response.isSuccessful) {
+                    throw ControlApiException(
+                        response.code,
+                        "Managed configuration failed (${response.code})"
+                    )
+                }
                 JsonParser.parseString(response.body?.string().orEmpty()).asJsonObject
             }
         }
+
+        val userName = config.getAsJsonObject("user")
+            ?.get("name")
+            ?.asString
+            ?.takeIf { it.isNotBlank() }
+            ?: fallbackUserName
+        _state.value = AiotvPairingState.Applying(userName)
 
         val managedUrls = config.getAsJsonArray("addons")
             ?.mapNotNull { element ->
@@ -145,16 +178,28 @@ class AiotvManagedPairingViewModel @Inject constructor(
             }
             .orEmpty()
 
-        val existing = addonRepository.getInstalledAddons().first()
-        existing.forEach { addon -> addonRepository.removeAddon(addon.baseUrl) }
-        managedUrls.forEach { url -> addonRepository.addAddon(url) }
-        addonRepository.setAddonOrder(managedUrls)
+        val fingerprint = managedUrls.joinToString(separator = "\n")
+        val storedFingerprint = preferences.getString(KEY_CONFIG_FINGERPRINT, null)
+        if (fingerprint != storedFingerprint) {
+            // setAddonOrder is an atomic replacement: it preserves Collections while making the
+            // control-server list authoritative, including removals and ordering.
+            addonRepository.setAddonOrder(managedUrls)
+        }
 
         preferences.edit()
             .putString(KEY_USER, userName)
             .putString(KEY_TOKEN, token)
+            .putString(KEY_CONFIG_FINGERPRINT, fingerprint)
             .apply()
         _state.value = AiotvPairingState.Paired(userName)
+    }
+
+    private fun clearManagedSession() {
+        preferences.edit()
+            .remove(KEY_TOKEN)
+            .remove(KEY_USER)
+            .remove(KEY_CONFIG_FINGERPRINT)
+            .apply()
     }
 
     private fun buildDeviceId(): String {
@@ -168,4 +213,9 @@ class AiotvManagedPairingViewModel @Inject constructor(
 
     private fun escapeJson(value: String): String =
         value.replace("\\", "\\\\").replace("\"", "\\\"")
+
+    private class ControlApiException(
+        val code: Int,
+        message: String
+    ) : IOException(message)
 }

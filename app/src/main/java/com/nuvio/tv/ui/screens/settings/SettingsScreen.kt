@@ -256,6 +256,7 @@ fun SettingsScreen(
     showBuiltInHeader: Boolean = true,
     onNavigateToTracking: () -> Unit = {},
     onNavigateToAddons: () -> Unit = {},
+    onNavigateToCollections: () -> Unit = {},
     onNavigateToPlugins: () -> Unit = {},
     onNavigateToAuthQrSignIn: () -> Unit = {},
     onNavigateToManageProfiles: () -> Unit = {},
@@ -289,12 +290,13 @@ fun SettingsScreen(
         allSectionSpecs.filter { section ->
             when (section.category) {
                 SettingsCategory.EXPERIENCE -> false
-                SettingsCategory.DEBUG -> BuildConfig.IS_DEBUG_BUILD && !isEssentialMode
-                SettingsCategory.PROFILES -> isPrimaryProfileActive
-                SettingsCategory.ACCOUNT -> isPrimaryProfileActive
+                SettingsCategory.DEBUG -> BuildConfig.IS_DEBUG_BUILD &&
+                    AppFeaturePolicy.debugSettingsEnabled && !isEssentialMode
+                SettingsCategory.PROFILES -> AppFeaturePolicy.profilesEnabled && isPrimaryProfileActive
+                SettingsCategory.ACCOUNT -> AppFeaturePolicy.legacyAccountEnabled && isPrimaryProfileActive
                 SettingsCategory.LAYOUT -> true
                 SettingsCategory.CONTENT_DISCOVERY -> true
-                SettingsCategory.INTEGRATION -> true
+                SettingsCategory.INTEGRATION -> AppFeaturePolicy.integrationsEnabled
                 SettingsCategory.ADVANCED -> true
                 else -> true
             }
@@ -717,6 +719,7 @@ fun SettingsScreen(
                                 integrationAnimeSkipFocusRequester = integrationAnimeSkipFocusRequester,
                                 onNavigateToManageProfiles = onNavigateToManageProfiles,
                                 onNavigateToAddons = onNavigateToAddons,
+                                onNavigateToCollections = onNavigateToCollections,
                                 onNavigateToPlugins = onNavigateToPlugins,
                                 onNavigateToAuthQrSignIn = onNavigateToAuthQrSignIn,
                                 onNavigateToSupportersContributors = onNavigateToSupportersContributors,
@@ -892,6 +895,7 @@ fun SettingsScreen(
                         integrationAnimeSkipFocusRequester = integrationAnimeSkipFocusRequester,
                         onNavigateToManageProfiles = onNavigateToManageProfiles,
                         onNavigateToAddons = onNavigateToAddons,
+                        onNavigateToCollections = onNavigateToCollections,
                         onNavigateToPlugins = onNavigateToPlugins,
                         onNavigateToAuthQrSignIn = onNavigateToAuthQrSignIn,
                         onNavigateToSupportersContributors = onNavigateToSupportersContributors,
@@ -920,6 +924,7 @@ private fun SettingsDetailPane(
     integrationAnimeSkipFocusRequester: FocusRequester,
     onNavigateToManageProfiles: () -> Unit,
     onNavigateToAddons: () -> Unit,
+    onNavigateToCollections: () -> Unit,
     onNavigateToPlugins: () -> Unit,
     onNavigateToAuthQrSignIn: () -> Unit,
     onNavigateToSupportersContributors: () -> Unit,
@@ -1019,7 +1024,9 @@ private fun SettingsDetailPane(
         )
         SettingsCategory.CONTENT_DISCOVERY -> ContentDiscoverySettingsContent(
             onNavigateToAddons = onNavigateToAddons,
+            onNavigateToCollections = onNavigateToCollections,
             onNavigateToPlugins = onNavigateToPlugins,
+            showAddonManagement = AppFeaturePolicy.addonManagementEnabled,
             showPlugins = AppFeaturePolicy.pluginsEnabled && !isEssentialMode,
             initialFocusRequester = if (allowDetailAutofocus) {
                 contentFocusRequesters[SettingsCategory.CONTENT_DISCOVERY]
@@ -1043,7 +1050,9 @@ private fun SettingsDetailPane(
 @Composable
 private fun ContentDiscoverySettingsContent(
     onNavigateToAddons: () -> Unit,
+    onNavigateToCollections: () -> Unit,
     onNavigateToPlugins: () -> Unit,
+    showAddonManagement: Boolean,
     showPlugins: Boolean,
     initialFocusRequester: FocusRequester?
 ) {
@@ -1053,20 +1062,40 @@ private fun ContentDiscoverySettingsContent(
     ) {
         SettingsDetailHeader(
             title = stringResource(R.string.settings_content_discovery),
-            subtitle = stringResource(R.string.settings_content_discovery_subtitle)
-        )
-        SettingsGroupCard(modifier = Modifier.fillMaxWidth()) {
-            SettingsActionRow(
-                title = stringResource(R.string.addon_title),
-                subtitle = stringResource(R.string.settings_content_discovery_addons_subtitle),
-                onClick = onNavigateToAddons,
-                leadingIcon = Icons.Default.GridView,
-                modifier = if (initialFocusRequester != null) {
-                    Modifier.focusRequester(initialFocusRequester)
+            subtitle = stringResource(
+                if (AppFeaturePolicy.managedBuild) {
+                    R.string.settings_content_discovery_managed_subtitle
                 } else {
-                    Modifier
+                    R.string.settings_content_discovery_subtitle
                 }
             )
+        )
+        SettingsGroupCard(modifier = Modifier.fillMaxWidth()) {
+            if (showAddonManagement) {
+                SettingsActionRow(
+                    title = stringResource(R.string.addon_title),
+                    subtitle = stringResource(R.string.settings_content_discovery_addons_subtitle),
+                    onClick = onNavigateToAddons,
+                    leadingIcon = Icons.Default.GridView,
+                    modifier = if (initialFocusRequester != null) {
+                        Modifier.focusRequester(initialFocusRequester)
+                    } else {
+                        Modifier
+                    }
+                )
+            } else {
+                SettingsActionRow(
+                    title = stringResource(R.string.collections_header),
+                    subtitle = stringResource(R.string.settings_content_discovery_collections_subtitle),
+                    onClick = onNavigateToCollections,
+                    leadingIcon = Icons.Default.GridView,
+                    modifier = if (initialFocusRequester != null) {
+                        Modifier.focusRequester(initialFocusRequester)
+                    } else {
+                        Modifier
+                    }
+                )
+            }
             if (showPlugins) {
                 SettingsActionRow(
                     title = stringResource(R.string.plugin_title),

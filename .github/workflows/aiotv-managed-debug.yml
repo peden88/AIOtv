@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   build:
-    name: Build managed fullDebug APK
+    name: Build managed AIOtv APK
     runs-on: ubuntu-latest
 
     steps:
@@ -49,33 +49,35 @@ jobs:
           fi
 
       - name: Prepare CI signing config
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.NUVIO_RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_KEY_ALIAS: ${{ secrets.NUVIO_RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.NUVIO_RELEASE_KEY_PASSWORD }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.NUVIO_RELEASE_STORE_PASSWORD }}
         run: |
-          keytool -genkeypair \
-            -v \
-            -keystore "$RUNNER_TEMP/ci-debug.jks" \
-            -storepass android \
-            -alias androiddebugkey \
-            -keypass android \
-            -dname "CN=AIOtv Managed Debug,O=AIOtv,C=GB" \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000
+          if [ -z "$RELEASE_KEYSTORE_BASE64" ]; then
+            echo "Missing NUVIO_RELEASE_KEYSTORE_BASE64; a stable key is required for upgradeable AIOtv builds." >&2
+            exit 1
+          fi
+
+          keystore_path="$RUNNER_TEMP/aiotv-managed.jks"
+          printf '%s' "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "$keystore_path"
 
           {
-            echo "NUVIO_RELEASE_STORE_FILE=$RUNNER_TEMP/ci-debug.jks"
-            echo "NUVIO_RELEASE_KEY_ALIAS=androiddebugkey"
-            echo "NUVIO_RELEASE_KEY_PASSWORD=android"
-            echo "NUVIO_RELEASE_STORE_PASSWORD=android"
+            echo "NUVIO_RELEASE_STORE_FILE=$keystore_path"
+            echo "NUVIO_RELEASE_KEY_ALIAS=${RELEASE_KEY_ALIAS:-nuviotv}"
+            echo "NUVIO_RELEASE_KEY_PASSWORD=${RELEASE_KEY_PASSWORD:-815787}"
+            echo "NUVIO_RELEASE_STORE_PASSWORD=${RELEASE_STORE_PASSWORD:-815787}"
           } >> "$GITHUB_ENV"
 
-      - name: Build managed fullDebug APK
-        run: ./gradlew :app:assembleFullDebug --stacktrace
+      - name: Build managed AIOtv APK
+        run: ./gradlew :app:assembleManagedDebug --stacktrace
 
       - name: Upload managed APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: aiotv-managed-debug-${{ github.run_number }}
-          path: app/build/outputs/apk/full/debug/app-full-universal-debug.apk
+          path: app/build/outputs/apk/managed/debug/app-managed-universal-debug.apk
           if-no-files-found: error
           retention-days: 14
 
@@ -83,5 +85,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp app/build/outputs/apk/full/debug/app-full-universal-debug.apk AIOtv-test.apk
+          cp app/build/outputs/apk/managed/debug/app-managed-universal-debug.apk AIOtv-test.apk
           gh release upload aiotv-test AIOtv-test.apk --clobber --repo "$GITHUB_REPOSITORY"
