@@ -1,17 +1,13 @@
 package com.nuvio.tv.ui.components
 
-import androidx.compose.foundation.Image
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
-import com.nuvio.tv.R
+import com.nuvio.tv.ui.aiotv.brand.AioBrandWordmark
 
 /**
- * Canonical AIOtv in-app wordmark.
- *
- * This intentionally ignores Nuvio's selectable theme-brand resources: AIOtv
- * has one product identity regardless of the user's colour/theme settings.
+ * Compatibility wrapper for upstream screens that still call BrandWordmark.
+ * The visible product identity is always the canonical AIOtv event-horizon lockup.
  */
 @Composable
 fun BrandWordmark(
@@ -20,10 +16,9 @@ fun BrandWordmark(
     contentScale: ContentScale = ContentScale.Fit,
     alpha: Float = 1f
 ) {
-    Image(
-        painter = painterResource(id = R.drawable.aiotv_wordmark),
-        contentDescription = contentDescription,
+    AioBrandWordmark(
         modifier = modifier,
+        contentDescription = contentDescription,
         contentScale = contentScale,
         alpha = alpha
     )
