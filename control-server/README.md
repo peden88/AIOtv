@@ -44,6 +44,10 @@ SQLite data is kept in the named `aiotv-control-data` Docker volume so container
 | `AIOTV_COOKIE_SECURE` | Keep `true` behind Pangolin HTTPS. |
 | `AIOTV_ALLOW_HTTP_ADDONS` | Development-only escape hatch; keep `false` in production. |
 
+## Android build
+
+Set `AIOTV_CONTROL_URL` to the same external HTTPS origin when building AIOtv. Local builds can put it in the repository's `local.properties`; GitHub Actions reads the `AIOTV_CONTROL_URL` repository variable. The setting is compiled into the APK and should not include a trailing slash.
+
 ## API summary
 
 ### TV
