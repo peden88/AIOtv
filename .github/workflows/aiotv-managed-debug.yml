@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: aiotv-managed-debug-${{ github.ref }}
@@ -71,10 +71,17 @@ jobs:
       - name: Build managed fullDebug APK
         run: ./gradlew :app:assembleFullDebug --stacktrace
 
-      - name: Upload managed APK
+      - name: Upload managed APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: aiotv-managed-debug-${{ github.run_number }}
           path: app/build/outputs/apk/full/debug/app-full-universal-debug.apk
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish permanent Downloader APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp app/build/outputs/apk/full/debug/app-full-universal-debug.apk AIOtv-test.apk
+          gh release upload aiotv-test AIOtv-test.apk --clobber --repo "$GITHUB_REPOSITORY"
