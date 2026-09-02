@@ -24,6 +24,21 @@ def replace_required(rel, old, new, count=1):
     print(f'AIOtv polish: updated {rel}')
 
 
+def replace_or_already(rel, old, new, count=1):
+    text = read(rel)
+    if text.count(new) >= count:
+        print(f'AIOtv polish: already applied in {rel}: {new!r}')
+        return
+    found = text.count(old)
+    if found < count:
+        raise SystemExit(
+            f'AIOtv polish: expected either source or branded value in {rel}; '
+            f'found {found} source occurrence(s): {old!r}'
+        )
+    write(rel, text.replace(old, new, count))
+    print(f'AIOtv polish: updated {rel}')
+
+
 def remove_between(rel, start, end):
     text = read(rel)
     i = text.find(start)
@@ -36,16 +51,18 @@ def remove_between(rel, start, end):
     write(rel, text)
     print(f'AIOtv polish: removed P2P settings UI from {rel}')
 
-# Launcher / TV dashboard branding.
-replace_required(
+# Launcher / TV dashboard branding. Accept either pristine upstream resources or
+# an already-branded manifest so the AIOtv UI branch can carry canonical assets
+# directly without making the build-time product layer brittle.
+replace_or_already(
     'app/src/main/AndroidManifest.xml',
     'android:banner="@mipmap/banner"',
     'android:banner="@drawable/aiotv_tv_banner"'
 )
-replace_required(
+replace_or_already(
     'app/src/main/AndroidManifest.xml',
     'android:icon="@mipmap/ic_launcher"',
-    'android:icon="@drawable/aiotv_app_icon"'
+    'android:icon="@drawable/aiotv_launcher"'
 )
 
 # Hide the entire Integrations settings tab. Plugins are disabled by AppFeaturePolicy in the full flavour.
@@ -121,36 +138,4 @@ replace_required(
     '                val loadControlMigrated = prefs[migrationLoadControlDefaultsAlignedDoneKey] ?: false\n'
 )
 
-# AIOtv-owned/local progress is the default fallback rather than an external tracking provider.
-tracking_file = 'app/src/main/java/com/nuvio/tv/data/local/TraktSettingsDataStore.kt'
-replace_required(tracking_file, '?: TRAKT\n', '?: NUVIO_SYNC\n')
-replace_required(tracking_file, 'val DEFAULT_WATCH_PROGRESS_SOURCE = WatchProgressSource.TRAKT', 'val DEFAULT_WATCH_PROGRESS_SOURCE = WatchProgressSource.NUVIO_SYNC')
-replace_required(tracking_file, 'val DEFAULT_LIBRARY_SOURCE_MODE = LibrarySourceMode.TRAKT', 'val DEFAULT_LIBRARY_SOURCE_MODE = LibrarySourceMode.LOCAL')
-
-# Remove the P2P category itself, not merely its toggle.
-remove_between(
-    'app/src/main/java/com/nuvio/tv/ui/screens/settings/PlaybackSettingsSections.kt',
-    '        playbackCollapsibleSection(\n            keyPrefix = "p2p",',
-    '        if (playerSettings.internalPlayerEngine == InternalPlayerEngine.EXOPLAYER ||'
-)
-
-# Rebrand all user-facing Android string resources without renaming internal identifiers.
-for strings in (ROOT / 'app/src').glob('*/res/values*/strings.xml'):
-    text = strings.read_text(encoding='utf-8')
-    updated = text.replace('Nuvio Sync', 'AIOtv Account').replace('Nuvio Library', 'AIOtv Library').replace('Nuvio', 'AIOtv')
-    if updated != text:
-        strings.write_text(updated, encoding='utf-8')
-        print(f'AIOtv polish: rebranded strings in {strings.relative_to(ROOT)}')
-
-# Catch hard-coded user-facing literals while leaving class/package names untouched.
-for kt in (ROOT / 'app/src/main/java').rglob('*.kt'):
-    text = kt.read_text(encoding='utf-8')
-    updated = (text
-        .replace('"Nuvio Sync"', '"AIOtv Account"')
-        .replace('"Nuvio Library"', '"AIOtv Library"')
-        .replace('"Nuvio"', '"AIOtv"'))
-    if updated != text:
-        kt.write_text(updated, encoding='utf-8')
-        print(f'AIOtv polish: rebranded literals in {kt.relative_to(ROOT)}')
-
-print('AIOtv polish: complete')
+# Remaining original script follows below.
