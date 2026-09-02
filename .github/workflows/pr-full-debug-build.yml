@@ -71,20 +71,20 @@ jobs:
       - name: Upload fullDebug APK
         uses: actions/upload-artifact@v4
         with:
-          name: aiotv-full-debug-pr-${{ github.event.pull_request.number || github.run_number }}
+          name: aiotv-ui-full-debug-pr-${{ github.event.pull_request.number || github.run_number }}
           path: app/build/outputs/apk/full/debug/app-full-universal-debug.apk
           if-no-files-found: error
           retention-days: 7
 
-      - name: Publish latest AIOtv test APK
+      - name: Publish latest AIOtv UI test APK
         if: github.repository == 'peden88/AIOtv' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository)
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           SOURCE_APK='app/build/outputs/apk/full/debug/app-full-universal-debug.apk'
-          RELEASE_APK='AIOtv-test.apk'
-          TAG='aiotv-test'
+          RELEASE_APK='AIOtv-ui-test.apk'
+          TAG='aiotv-ui-test'
 
           cp "$SOURCE_APK" "$RELEASE_APK"
 
@@ -94,7 +94,7 @@ jobs:
             gh release create "$TAG" \
               "$RELEASE_APK" \
               --target "$HEAD_SHA" \
-              --title 'AIOtv Test Build' \
-              --notes 'Latest installable AIOtv test APK. This asset is replaced on each successful test build.' \
+              --title 'AIOtv UI Test Build' \
+              --notes 'Isolated AIOtv UI redesign prototype. This does not replace the known-good AIOtv test release.' \
               --prerelease
           fi
