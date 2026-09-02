@@ -61,6 +61,7 @@ jobs:
         run: |
           python3 scripts/apply-aiotv-polish.py
           python3 scripts/apply-aiotv-ui-refresh.py
+          python3 scripts/apply-aiotv-shell.py
 
       - name: Test updater and build fullDebug APK
         run: ./gradlew :app:testFullDebugUnitTest --tests 'com.nuvio.tv.updater.*' :app:assembleFullDebug --stacktrace
