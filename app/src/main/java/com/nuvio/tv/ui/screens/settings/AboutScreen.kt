@@ -2,8 +2,6 @@
 
 package com.nuvio.tv.ui.screens.settings
 
-import com.nuvio.tv.ui.theme.NuvioTheme
-
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
@@ -19,15 +17,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -36,7 +33,8 @@ import androidx.tv.material3.Text
 import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.R
 import com.nuvio.tv.core.build.AppFeaturePolicy
-import com.nuvio.tv.ui.components.MemberBrandWordmark
+import com.nuvio.tv.ui.aiotv.brand.AioBrandWordmark
+import com.nuvio.tv.ui.aiotv.design.AioColors
 
 @Composable
 fun AboutScreen(
@@ -47,8 +45,8 @@ fun AboutScreen(
     BackHandler { onBackPress() }
 
     SettingsStandaloneScaffold(
-        title = stringResource(R.string.about_title),
-        subtitle = stringResource(R.string.about_subtitle)
+        title = "About AIOtv",
+        subtitle = "Version, licences and project information"
     ) {
         AboutSettingsContent(
             onNavigateToSupportersContributors = onNavigateToSupportersContributors,
@@ -70,8 +68,8 @@ fun AboutSettingsContent(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         SettingsDetailHeader(
-            title = stringResource(R.string.about_title),
-            subtitle = stringResource(R.string.about_subtitle)
+            title = "About AIOtv",
+            subtitle = "AIOtv product information and open-source acknowledgements"
         )
 
         SettingsGroupCard(
@@ -82,75 +80,83 @@ fun AboutSettingsContent(
         ) {
             val aboutScrollState = rememberScrollState()
             Box(modifier = Modifier.fillMaxSize()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(aboutScrollState),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Spacer(modifier = Modifier.height(NuvioTheme.spacing.xs))
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(aboutScrollState),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                MemberBrandWordmark(
-                    height = 40.dp,
-                    contentDescription = stringResource(R.string.cd_nuvio_logo)
-                )
+                    AioBrandWordmark(
+                        modifier = Modifier
+                            .width(310.dp)
+                            .height(92.dp),
+                        contentDescription = "AIOtv"
+                    )
 
-                Text(
-                    text = stringResource(R.string.about_made_with_love),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = NuvioTheme.colors.TextSecondary,
-                    textAlign = TextAlign.Center
-                )
+                    Text(
+                        text = "Your media. One interface.",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = AioColors.TextPrimary,
+                        fontWeight = FontWeight.Medium,
+                        textAlign = TextAlign.Center
+                    )
 
-                Text(
-                    text = stringResource(R.string.about_version, BuildConfig.VERSION_NAME),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = NuvioTheme.colors.TextSecondary,
-                    textAlign = TextAlign.Center
-                )
+                    Text(
+                        text = stringResource(R.string.about_version, BuildConfig.VERSION_NAME),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = AioColors.TextSecondary,
+                        textAlign = TextAlign.Center
+                    )
 
-                Spacer(modifier = Modifier.height(NuvioTheme.spacing.xxs))
+                    Text(
+                        text = "AIOtv is built on the open-source NuvioTV project and retains its upstream licence and attribution requirements.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = AioColors.TextMuted,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.width(620.dp)
+                    )
 
-                if (AppFeaturePolicy.inAppUpdatesEnabled) {
-                    UpdateChannelSettings(initialFocusRequester)
-                }
+                    Spacer(modifier = Modifier.height(6.dp))
 
-                SettingsActionRow(
-                    title = stringResource(R.string.about_privacy_policy),
-                    subtitle = stringResource(R.string.about_privacy_policy_subtitle),
-                    trailingIcon = Icons.Default.OpenInNew,
-                    modifier = if (!AppFeaturePolicy.inAppUpdatesEnabled && initialFocusRequester != null) {
-                        Modifier.focusRequester(initialFocusRequester)
-                    } else {
-                        Modifier
-                    },
-                    onClick = {
-                        val intent = Intent(
-                            Intent.ACTION_VIEW,
-                            Uri.parse("https://nuvio.tv/privacy-policy")
-                        )
-                        context.startActivity(intent)
+                    if (AppFeaturePolicy.inAppUpdatesEnabled) {
+                        UpdateChannelSettings(initialFocusRequester)
                     }
-                )
 
-                if (AppFeaturePolicy.supportNuvioEnabled) {
+                    // Keep upstream legal information explicit without presenting
+                    // Nuvio as AIOtv's product identity.
                     SettingsActionRow(
-                        title = stringResource(R.string.support_nuvio_name),
-                        subtitle = stringResource(R.string.about_supporters_contributors_subtitle),
+                        title = "Upstream NuvioTV project",
+                        subtitle = "Open the project AIOtv is built upon",
+                        modifier = if (!AppFeaturePolicy.inAppUpdatesEnabled && initialFocusRequester != null) {
+                            Modifier.focusRequester(initialFocusRequester)
+                        } else Modifier,
+                        onClick = {
+                            context.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/NuvioMedia/NuvioTV"))
+                            )
+                        }
+                    )
+
+                    if (AppFeaturePolicy.supportNuvioEnabled) {
+                        SettingsActionRow(
+                            title = "NuvioTV supporters & contributors",
+                            subtitle = stringResource(R.string.about_supporters_contributors_subtitle),
+                            trailingIcon = Icons.Default.ChevronRight,
+                            onClick = onNavigateToSupportersContributors
+                        )
+                    }
+
+                    SettingsActionRow(
+                        title = stringResource(R.string.about_licenses_attributions),
+                        subtitle = stringResource(R.string.about_licenses_attributions_subtitle),
                         trailingIcon = Icons.Default.ChevronRight,
-                        onClick = onNavigateToSupportersContributors
+                        onClick = onNavigateToLicensesAttributions
                     )
                 }
-
-                SettingsActionRow(
-                    title = stringResource(R.string.about_licenses_attributions),
-                    subtitle = stringResource(R.string.about_licenses_attributions_subtitle),
-                    trailingIcon = Icons.Default.ChevronRight,
-                    onClick = onNavigateToLicensesAttributions
-                )
-            }
-            SettingsVerticalScrollIndicators(state = aboutScrollState)
+                SettingsVerticalScrollIndicators(state = aboutScrollState)
             }
         }
     }
