@@ -57,6 +57,7 @@ import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
+import com.nuvio.tv.ui.aiotv.brand.AioBrandGlyph
 import com.nuvio.tv.ui.aiotv.design.AioColors
 import com.nuvio.tv.ui.aiotv.design.AioMotion
 import com.nuvio.tv.ui.aiotv.design.AioRadii
@@ -164,8 +165,16 @@ fun AioNavigationScaffold(
                     )
                     .padding(horizontal = 9.dp, vertical = 16.dp)
                     .onFocusChanged { railHasFocus = it.hasFocus },
+                horizontalAlignment = Alignment.Start,
                 verticalArrangement = Arrangement.Center
             ) {
+                AioBrandGlyph(
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .size(width = 46.dp, height = 31.dp),
+                    contentDescription = null,
+                    alpha = if (railHasFocus) 0.9f else 0.62f
+                )
                 Spacer(modifier = Modifier.weight(1f))
                 drawerItems.forEachIndexed { index, item ->
                     AioRailItem(
