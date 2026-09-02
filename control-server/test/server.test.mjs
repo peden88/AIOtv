@@ -68,12 +68,12 @@ test('administrator can create a profile and pair, bootstrap, then revoke a TV',
   const addon = await read(await adminRequest(`/api/admin/users/${userId}/addons`, {
     method: 'POST',
     body: JSON.stringify({
-      name: 'AIOStreams – Gary',
+      name: 'Example Streams – Gary',
       manifestUrl: 'https://example.com/gary/manifest.json',
     }),
   }));
   assert.equal(addon.response.status, 201);
-  assert.equal(addon.payload.data.name, 'AIOStreams – Gary');
+  assert.equal(addon.payload.data.name, 'Example Streams – Gary');
 
   const start = await read(await fetch(`${base}/api/v1/pairings`, {
     method: 'POST',
