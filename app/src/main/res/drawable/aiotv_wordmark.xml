@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="96dp"
+    android:viewportWidth="320"
+    android:viewportHeight="96">
+
+    <!-- Transparent in-app wordmark. Event horizon sits behind the lettering. -->
+    <path
+        android:fillColor="#6E727A"
+        android:pathData="M40,44 C55,23 84,15 114,18 C145,21 166,31 177,44 C155,35 132,32 108,32 C82,32 59,36 40,44 Z" />
+    <path
+        android:fillColor="#E1E2E4"
+        android:pathData="M25,49 C55,41 86,39 116,40 C145,41 169,44 190,50 C165,47 140,46 115,46 C84,46 54,48 25,53 Z" />
+    <path
+        android:fillColor="#4F535B"
+        android:pathData="M38,55 C60,67 84,73 110,73 C136,73 158,66 177,54 C164,72 138,82 110,82 C82,82 55,72 38,55 Z" />
+    <path
+        android:fillColor="#090A0C"
+        android:pathData="M59,48 C69,31 86,26 107,27 C127,28 144,34 155,48 C141,45 125,44 108,44 C90,44 74,45 59,48 Z M58,55 C74,59 91,61 109,61 C127,61 144,59 158,55 C148,71 130,77 109,77 C88,77 69,70 58,55 Z" />
+
+    <!-- Greyscale AIOtv lettering in front. -->
+    <path android:fillColor="#F4F4F5" android:pathData="M101,35 L112,35 L126,68 L116,68 L113,60 L99,60 L96,68 L86,68 Z M102,53 H110 L106,42 Z" />
+    <path android:fillColor="#D8D9DC" android:pathData="M132,35 H141 V68 H132 Z" />
+    <path android:fillColor="#BFC1C5" android:pathData="M163,34 C179,34 189,41 189,51 C189,62 179,69 163,69 C147,69 145,62 145,51 C145,41 151,34 163,34 Z M163,41 C155,41 153,45 153,51 C153,58 156,62 163,62 C174,62 181,58 181,51 C181,45 174,41 163,41 Z" />
+    <path android:fillColor="#989BA1" android:pathData="M198,38 H207 V45 H216 V52 H207 V59 C207,62 211,62 216,61 V68 C203,70 198,65 198,57 V52 H192 V45 H198 Z" />
+    <path android:fillColor="#747880" android:pathData="M220,45 H230 L240,60 L250,45 H260 L244,69 H236 Z" />
+</vector>
