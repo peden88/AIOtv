@@ -1,7 +1,6 @@
 import hashlib
 import os
 import secrets
-import string
 from datetime import datetime, timedelta, timezone
 from html import escape
 from typing import Optional
@@ -93,7 +92,7 @@ def token_hash(token: str) -> str:
 
 
 def make_code() -> str:
-    alphabet = stringABCDEFGHJKLMNPQRSTUVWXYZ23456789
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
     with Session(engine) as db:
         for _ in range(30):
             code = "".join(secrets.choice(alphabet) for _ in range(6))
