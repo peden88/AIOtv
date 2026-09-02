@@ -33,6 +33,7 @@ class AioTvManagedAccountRepository @Inject constructor(
 
     sealed interface BootstrapResult {
         data class Ready(val data: AioTvBootstrapData) : BootstrapResult
+        data class Current(val policyRevision: Int) : BootstrapResult
         data class OfflineReady(val policyRevision: Int) : BootstrapResult
         data object NoSession : BootstrapResult
         data object Revoked : BootstrapResult
@@ -140,16 +141,18 @@ class AioTvManagedAccountRepository @Inject constructor(
     ): BootstrapResult = withContext(Dispatchers.IO) {
         if (!isServerConfigured) return@withContext BootstrapResult.Failed("AIOtv Control is not configured")
         try {
-            // Always request the policy body during startup. ETag metadata is
-            // persisted for the later lightweight background refresh path.
             val response = api.bootstrap(
                 "$baseUrl/api/v1/device/bootstrap",
                 "Bearer ${session.accessToken}",
-                null
+                session.bootstrapEtag
             )
             if (response.code() == 401 || response.code() == 403) {
                 authStore.clear()
                 return@withContext BootstrapResult.Revoked
+            }
+            if (response.code() == 304) {
+                authStore.saveBootstrapMetadata(session.bootstrapEtag, session.policyRevision)
+                return@withContext BootstrapResult.Current(session.policyRevision)
             }
             val envelope = response.body()
             val data = envelope?.data

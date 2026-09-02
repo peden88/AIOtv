@@ -1154,6 +1154,7 @@ open class MainActivity : ComponentActivity() {
             }
             null,
             is AioTvManagedAccountRepository.BootstrapResult.Ready,
+            is AioTvManagedAccountRepository.BootstrapResult.Current,
             is AioTvManagedAccountRepository.BootstrapResult.OfflineReady,
             is AioTvManagedAccountRepository.BootstrapResult.Failed -> Unit
         }

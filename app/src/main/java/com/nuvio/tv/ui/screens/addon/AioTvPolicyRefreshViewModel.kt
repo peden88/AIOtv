@@ -33,6 +33,12 @@ class AioTvPolicyRefreshViewModel @Inject constructor(
                         message = "Assigned addons refreshed (policy revision ${result.data.policy.revision})."
                     )
                 }
+                is AioTvManagedAccountRepository.BootstrapResult.Current -> {
+                    AioTvPolicyRefreshState(
+                        message = "Assigned addons are already current " +
+                            "(policy revision ${result.policyRevision})."
+                    )
+                }
                 is AioTvManagedAccountRepository.BootstrapResult.OfflineReady -> {
                     AioTvPolicyRefreshState(
                         message = "AIOtv Control is offline. Using the last verified assignments " +

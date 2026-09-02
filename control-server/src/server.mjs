@@ -258,7 +258,13 @@ export function createControlServer(overrides = {}) {
           return failure(response, 400, 'invalid_device_code', 'Device code is missing or invalid');
         }
         const ip = requestIp(request);
-        if (!allowRate(`pair-poll:${ip}:${sha256(deviceCode).slice(0, 12)}`, 240, 20 * 60 * 1000, now.getTime())) {
+        const maximumPolls = Math.ceil(config.pairingTtlSeconds / config.pairingPollSeconds) + 30;
+        if (!allowRate(
+          `pair-poll:${ip}:${sha256(deviceCode).slice(0, 12)}`,
+          maximumPolls,
+          (config.pairingTtlSeconds + 60) * 1000,
+          now.getTime(),
+        )) {
           return failure(response, 429, 'slow_down', 'Pairing checks are too frequent');
         }
         const pairing = database.getPairingByTokenHash(sha256(deviceCode), now);
@@ -283,7 +289,13 @@ export function createControlServer(overrides = {}) {
         const bootstrap = database.getBootstrap(sha256(token), now);
         if (!bootstrap) return failure(response, 401, 'invalid_token', 'Device token is invalid');
         if (bootstrap.revoked) return failure(response, 403, 'device_revoked', 'This TV is no longer authorised');
-        const etag = `W/\"${bootstrap.device.id}:${bootstrap.policy.revision}\"`;
+        const etagValue = sha256([
+          bootstrap.device.id,
+          bootstrap.device.name,
+          bootstrap.profile.id,
+          bootstrap.policy.revision,
+        ].join('\0')).slice(0, 32);
+        const etag = `W/\"${etagValue}\"`;
         if (request.headers['if-none-match'] === etag) {
           response.writeHead(304, { ETag: etag, 'Cache-Control': 'no-cache' });
           return response.end();

@@ -135,6 +135,27 @@ test('administrator can create a profile and pair, bootstrap, then revoke a TV',
   });
   assert.equal(notModified.status, 304);
 
+  const secondUser = await read(await adminRequest('/api/admin/users', {
+    method: 'POST',
+    body: JSON.stringify({ name: 'Living room' }),
+  }));
+  const reassigned = await read(await adminRequest(`/api/admin/devices/${approved.payload.data.deviceId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ userId: secondUser.payload.data.id }),
+  }));
+  assert.equal(reassigned.response.status, 200);
+
+  const reassignedBootstrapResponse = await fetch(`${base}/api/v1/device/bootstrap`, {
+    headers: {
+      authorization: `Bearer ${token.payload.data.accessToken}`,
+      'if-none-match': etag,
+    },
+  });
+  const reassignedBootstrap = await read(reassignedBootstrapResponse);
+  assert.equal(reassignedBootstrap.response.status, 200);
+  assert.equal(reassignedBootstrap.payload.data.profile.name, 'Living room');
+  assert.notEqual(reassignedBootstrap.response.headers.get('etag'), etag);
+
   const revoked = await read(await adminRequest(`/api/admin/devices/${approved.payload.data.deviceId}/revoke`, {
     method: 'POST',
   }));

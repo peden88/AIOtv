@@ -13,7 +13,7 @@ services:
       AIOTV_COOKIE_SECURE: ${AIOTV_COOKIE_SECURE:-true}
       AIOTV_ALLOW_HTTP_ADDONS: ${AIOTV_ALLOW_HTTP_ADDONS:-false}
     volumes:
-      - ./data:/app/data
+      - aiotv-control-data:/app/data
     ports:
       - "127.0.0.1:3010:3000"
     networks:
@@ -34,3 +34,6 @@ networks:
   pangolin:
     external: true
     name: pangolin_frontend
+
+volumes:
+  aiotv-control-data:

@@ -31,6 +31,8 @@ docker compose up --build -d
 
 The Compose example joins `pangolin_frontend`, so Pangolin can target `http://aiotv-control:3000`. It also binds `127.0.0.1:3010` for local diagnostics. Keep the device API and dashboard on the same HTTPS origin. Dashboard routes enforce their own administrator session; device routes accept only pairing or device credentials.
 
+SQLite data is kept in the named `aiotv-control-data` Docker volume so container upgrades do not discard users or pairings. Back up that volume before a host migration.
+
 ## Required environment
 
 | Variable | Purpose |

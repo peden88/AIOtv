@@ -60,6 +60,7 @@ class AioTvGateViewModel @Inject constructor(
             _state.value = AioTvGateState.Loading
             when (val result = repository.restoreAndBootstrap()) {
                 is AioTvManagedAccountRepository.BootstrapResult.Ready -> markReady()
+                is AioTvManagedAccountRepository.BootstrapResult.Current -> markReady()
                 is AioTvManagedAccountRepository.BootstrapResult.OfflineReady -> markReady()
                 AioTvManagedAccountRepository.BootstrapResult.NoSession,
                 AioTvManagedAccountRepository.BootstrapResult.Revoked -> startPairing()
@@ -102,6 +103,7 @@ class AioTvGateViewModel @Inject constructor(
                     _state.value = AioTvGateState.Loading
                     when (val bootstrap = repository.bootstrapAndReconcile(poll.session)) {
                         is AioTvManagedAccountRepository.BootstrapResult.Ready -> markReady()
+                        is AioTvManagedAccountRepository.BootstrapResult.Current -> markReady()
                         is AioTvManagedAccountRepository.BootstrapResult.OfflineReady -> markReady()
                         AioTvManagedAccountRepository.BootstrapResult.Revoked,
                         AioTvManagedAccountRepository.BootstrapResult.NoSession -> {
