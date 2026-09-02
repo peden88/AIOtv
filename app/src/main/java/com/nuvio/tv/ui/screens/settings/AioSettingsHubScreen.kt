@@ -152,8 +152,8 @@ private fun AioSettingsRow(destination: AioSettingsDestination) {
         shape = CardDefaults.shape(shape),
         scale = CardDefaults.scale(focusedScale = 1.01f, pressedScale = 0.995f),
         border = CardDefaults.border(
-            border = Border(BorderStroke(1.dp, AioColors.Divider), shape),
-            focusedBorder = Border(BorderStroke(2.dp, AioColors.FocusBorder), shape)
+            border = Border(BorderStroke(1.dp, AioColors.Divider), 0.dp),
+            focusedBorder = Border(BorderStroke(2.dp, AioColors.FocusBorder), 0.dp)
         )
     ) {
         Row(
