@@ -47,6 +47,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -88,6 +89,7 @@ fun AioNavigationScaffold(
         drawerItems.associate { it.route to FocusRequester() }
     }
     val contentRequester = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
     var railHasFocus by remember { mutableStateOf(false) }
     var pendingContentFocus by remember { mutableStateOf(false) }
 
@@ -128,9 +130,7 @@ fun AioNavigationScaffold(
                     if (!showRail || event.type != KeyEventType.KeyDown || event.key != Key.DirectionLeft) {
                         return@onKeyEvent false
                     }
-                    val moved = androidx.compose.ui.platform.LocalFocusManager.current
-                        .moveFocus(FocusDirection.Left)
-                    if (moved) {
+                    if (focusManager.moveFocus(FocusDirection.Left)) {
                         true
                     } else {
                         itemRequesters[drawerItems.getOrNull(currentIndex)?.route]
