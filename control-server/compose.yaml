@@ -1,0 +1,51 @@
+name: aiotv-control
+
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: aiotv-control-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: aiotv
+      POSTGRES_USER: aiotv
+      POSTGRES_PASSWORD: ${AIOTV_DB_PASSWORD:?Set AIOTV_DB_PASSWORD}
+    volumes:
+      - aiotv_control_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aiotv -d aiotv"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - internal
+
+  control:
+    image: ghcr.io/peden88/aiotv-control:dev
+    container_name: aiotv-control
+    restart: unless-stopped
+    pull_policy: always
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://aiotv:${AIOTV_DB_PASSWORD}@db:5432/aiotv
+      ADMIN_PASSWORD: ${AIOTV_ADMIN_PASSWORD:?Set AIOTV_ADMIN_PASSWORD}
+      SESSION_SECRET: ${AIOTV_SESSION_SECRET:?Set AIOTV_SESSION_SECRET}
+      PUBLIC_URL: https://aiocontrol.peden88.stream
+      PAIRING_TTL_MINUTES: "15"
+      TZ: Europe/London
+    ports:
+      - "127.0.0.1:8788:8080"
+    networks:
+      - internal
+      - pangolin_frontend
+
+volumes:
+  aiotv_control_postgres:
+
+networks:
+  internal:
+    driver: bridge
+  pangolin_frontend:
+    external: true
