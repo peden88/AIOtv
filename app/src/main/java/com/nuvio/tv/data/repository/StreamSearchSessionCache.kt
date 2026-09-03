@@ -37,7 +37,9 @@ internal class StreamSearchSessionCache(
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     private val nowMs: () -> Long = System::currentTimeMillis,
     private val completedTtlMs: Long = DEFAULT_COMPLETED_TTL_MS,
-    private val maxEntries: Int = DEFAULT_MAX_ENTRIES
+    private val maxEntries: Int = DEFAULT_MAX_ENTRIES,
+    private val prefetchCompletedTtlMs: Long = DEFAULT_PREFETCH_COMPLETED_TTL_MS,
+    private val maxPrefetchEntries: Int = DEFAULT_MAX_PREFETCH_ENTRIES,
 ) {
     private data class Snapshot(
         val result: NetworkResult<List<AddonStreams>>,
@@ -46,7 +48,8 @@ internal class StreamSearchSessionCache(
     )
 
     private class Session(
-        val state: MutableStateFlow<Snapshot>
+        val state: MutableStateFlow<Snapshot>,
+        var prefetchedOnly: Boolean,
     ) {
         lateinit var job: Job
         @Volatile var invalidated: Boolean = false
@@ -62,7 +65,12 @@ internal class StreamSearchSessionCache(
         forceRefresh: Boolean,
         producer: () -> Flow<NetworkResult<List<AddonStreams>>>
     ): Flow<NetworkResult<List<AddonStreams>>> = flow {
-        val session = acquireSession(key, forceRefresh, producer)
+        val session = acquireSession(
+            key = key,
+            forceRefresh = forceRefresh,
+            prefetchedOnly = false,
+            producer = producer,
+        )
         var emittedVersion = -1L
         emitAll(
             session.state.transformWhile { snapshot ->
@@ -75,9 +83,23 @@ internal class StreamSearchSessionCache(
         )
     }
 
+    /** Starts a repository-owned search so a later observer can attach to it. */
+    suspend fun prefetch(
+        key: StreamSearchRequestKey,
+        producer: () -> Flow<NetworkResult<List<AddonStreams>>>
+    ) {
+        acquireSession(
+            key = key,
+            forceRefresh = false,
+            prefetchedOnly = true,
+            producer = producer,
+        )
+    }
+
     private suspend fun acquireSession(
         key: StreamSearchRequestKey,
         forceRefresh: Boolean,
+        prefetchedOnly: Boolean,
         producer: () -> Flow<NetworkResult<List<AddonStreams>>>
     ): Session {
         var created: Session? = null
@@ -88,11 +110,15 @@ internal class StreamSearchSessionCache(
             if (forceRefresh) {
                 sessions.remove(key)?.cancelAndComplete()
             } else {
-                sessions[key]?.let { return@withLock it }
+                sessions[key]?.let { session ->
+                    if (!prefetchedOnly) session.prefetchedOnly = false
+                    return@withLock session
+                }
             }
 
-            createSession(key, producer).also { session ->
+            createSession(key, prefetchedOnly, producer).also { session ->
                 sessions[key] = session
+                trimPrefetchEntriesLocked()
                 trimToSizeLocked()
                 created = session
             }
@@ -105,6 +131,7 @@ internal class StreamSearchSessionCache(
 
     private fun createSession(
         key: StreamSearchRequestKey,
+        prefetchedOnly: Boolean,
         producer: () -> Flow<NetworkResult<List<AddonStreams>>>
     ): Session {
         val session = Session(
@@ -114,7 +141,8 @@ internal class StreamSearchSessionCache(
                     version = 0L,
                     isComplete = false
                 )
-            )
+            ),
+            prefetchedOnly = prefetchedOnly,
         )
         session.job = scope.launch(start = CoroutineStart.LAZY) {
             try {
@@ -191,10 +219,25 @@ internal class StreamSearchSessionCache(
         while (iterator.hasNext()) {
             val session = iterator.next().value
             val completedAt = session.completedAtMs ?: continue
-            if (now - completedAt >= completedTtlMs) {
+            val ttlMs = if (session.prefetchedOnly) prefetchCompletedTtlMs else completedTtlMs
+            if (now - completedAt >= ttlMs) {
                 iterator.remove()
                 session.cancelAndComplete()
             }
+        }
+    }
+
+    private fun trimPrefetchEntriesLocked() {
+        var prefetchCount = sessions.values.count { it.prefetchedOnly }
+        if (prefetchCount <= maxPrefetchEntries) return
+
+        val iterator = sessions.entries.iterator()
+        while (iterator.hasNext() && prefetchCount > maxPrefetchEntries) {
+            val session = iterator.next().value
+            if (!session.prefetchedOnly) continue
+            iterator.remove()
+            session.cancelAndComplete()
+            prefetchCount -= 1
         }
     }
 
@@ -224,5 +267,7 @@ internal class StreamSearchSessionCache(
     private companion object {
         const val DEFAULT_COMPLETED_TTL_MS = 15 * 60 * 1_000L
         const val DEFAULT_MAX_ENTRIES = 12
+        const val DEFAULT_PREFETCH_COMPLETED_TTL_MS = 10 * 60 * 1_000L
+        const val DEFAULT_MAX_PREFETCH_ENTRIES = 2
     }
 }

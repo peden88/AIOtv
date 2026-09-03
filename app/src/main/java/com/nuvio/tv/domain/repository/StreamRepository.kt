@@ -27,6 +27,18 @@ interface StreamRepository {
     ): Flow<NetworkResult<List<AddonStreams>>>
 
     /**
+     * Starts an installed-addon stream search without resolving or downloading media.
+     * Local scraper plugins remain paused until playback actually requests the
+     * episode, and results are retained only in the short-lived in-memory cache.
+     */
+    suspend fun prefetchStreams(
+        type: String,
+        videoId: String,
+        season: Int? = null,
+        episode: Int? = null
+    )
+
+    /**
      * Fetches streams from a specific addon.
      *
      * Takes the installed [Addon] rather than a bare base URL so the display name and logo
