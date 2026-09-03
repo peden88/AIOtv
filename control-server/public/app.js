@@ -54,7 +54,11 @@ function showApp() {
 }
 
 function setBusy(form, busy) {
-  $$('button, input, select', form).forEach((control) => { control.disabled = busy; });
+  // Disabled inputs and selects are excluded from FormData. Only lock the
+  // submit controls so every form can still read its values while awaiting
+  // the request.
+  $('button', form).forEach((control) => { control.disabled = busy; });
+  form.setAttribute('aria-busy', String(busy));
 }
 
 function setError(target, message = '') {

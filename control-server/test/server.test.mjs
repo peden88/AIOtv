@@ -23,6 +23,16 @@ test('login captures the password before disabling form controls', () => {
   assert.ok(capturePassword < disableForm, 'password must be read before its input is disabled');
 });
 
+test('busy forms keep successful controls available to FormData', () => {
+  const script = readFileSync(path.resolve(import.meta.dirname, '../public/app.js'), 'utf8');
+  const start = script.indexOf('function setBusy(form, busy)');
+  const end = script.indexOf('\n}', start) + 2;
+  const setBusy = script.slice(start, end);
+
+  assert.match(setBusy, /\$\$\(['"]button['"], form\)/);
+  assert.doesNotMatch(setBusy, /button, input|input, select|querySelectorAll\([^)]*input/);
+});
+
 test('administrator passwords may contain a single character', async (t) => {
   const tempDir = mkdtempSync(path.join(os.tmpdir(), 'aiotv-control-test-'));
   const app = createControlServer({
