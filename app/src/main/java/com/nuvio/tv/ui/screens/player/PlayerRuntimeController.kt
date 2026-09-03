@@ -417,6 +417,7 @@ class PlayerRuntimeController(
     internal var metaCountry: String? = null
     internal var metaFetchJob: Job? = null
     internal var nextEpisodeVideo: Video? = null
+    internal var nextEpisodeStreamPrefetchKey: String? = null
     internal var userPausedManually = false
 
     internal var isInBackground: Boolean = false

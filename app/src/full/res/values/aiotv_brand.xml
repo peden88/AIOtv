@@ -2,8 +2,8 @@
 <resources>
     <string name="app_name">AIOtv</string>
 
-    <item name="app_logo_mark" type="drawable">@drawable/aiotv_app_icon</item>
-    <item name="ic_launcher" type="drawable">@drawable/aiotv_app_icon</item>
+    <item name="app_logo_mark" type="drawable">@drawable/aiotv_launcher</item>
+    <item name="ic_launcher" type="drawable">@drawable/aiotv_launcher</item>
     <item name="app_logo_wordmark" type="drawable">@drawable/aiotv_wordmark</item>
     <item name="app_logo_wordmark_arctic_blue" type="drawable">@drawable/aiotv_wordmark</item>
     <item name="app_logo_wordmark_gold" type="drawable">@drawable/aiotv_wordmark</item>

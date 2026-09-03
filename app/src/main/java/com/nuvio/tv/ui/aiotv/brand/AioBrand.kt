@@ -24,7 +24,7 @@ fun AioBrandWordmark(
     )
 }
 
-/** Compact event-horizon-only mark for navigation and subtle system states. */
+/** Compact inverted event-horizon tile for navigation and subtle system states. */
 @Composable
 fun AioBrandGlyph(
     modifier: Modifier = Modifier,

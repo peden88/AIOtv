@@ -128,6 +128,46 @@ class StreamRepositoryImpl @Inject constructor(
         )
     }
 
+    override suspend fun prefetchStreams(
+        type: String,
+        videoId: String,
+        season: Int?,
+        episode: Int?
+    ) {
+        val sourceConfiguration = captureSourceConfiguration()
+        val requestKey = StreamSearchRequestKey(
+            profileId = sourceConfiguration.profileId,
+            type = type.lowercase(),
+            videoId = videoId,
+            season = season,
+            episode = episode,
+            sourceConfiguration = buildSourceConfigurationKey(
+                addons = sourceConfiguration.addons,
+                pluginsEnabled = sourceConfiguration.pluginsEnabled,
+                enabledScrapers = sourceConfiguration.enabledScrapers,
+                groupPluginsByRepository = sourceConfiguration.groupPluginsByRepository,
+                pluginRepositories = sourceConfiguration.pluginRepositories,
+                debridPresentationConfiguration = sourceConfiguration.debridSettings
+                    .withoutRawCredentials()
+                    .toString()
+            )
+        )
+
+        streamSearchSessions.prefetch(requestKey) {
+            fetchStreamsFromAllSources(
+                type = type,
+                videoId = videoId,
+                season = season,
+                episode = episode,
+                addons = sourceConfiguration.addons,
+                debridSettings = sourceConfiguration.debridSettings,
+                // Local plugin work is deliberately paused during playback. Prefetch
+                // only the installed remote addons so it cannot wake CPU-heavy scrapers.
+                hasCompatiblePlugins = false
+            )
+        }
+    }
+
     private suspend fun captureSourceConfiguration(): StreamSourceConfigurationSnapshot {
         while (true) {
             val profileId = profileManager.activeProfileId.value

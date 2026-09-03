@@ -13,6 +13,27 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+internal const val NEXT_EPISODE_STREAM_PREFETCH_WINDOW_MS = 60_000L
+
+internal fun shouldPrefetchNextEpisodeStreams(
+    positionMs: Long,
+    durationMs: Long,
+    isLive: Boolean,
+    hasRenderedFirstFrame: Boolean,
+    hasPlaybackError: Boolean,
+    autoPlayNextEpisodeEnabled: Boolean,
+    nextEpisodeHasAired: Boolean,
+    hasNextEpisode: Boolean,
+    isCloudPlayback: Boolean,
+    alreadyPrefetched: Boolean,
+): Boolean {
+    if (isLive || !hasRenderedFirstFrame || hasPlaybackError || !autoPlayNextEpisodeEnabled) return false
+    if (!nextEpisodeHasAired || !hasNextEpisode || isCloudPlayback || alreadyPrefetched) return false
+    if (isShortPlaceholderDuration(durationMs)) return false
+    val remainingMs = durationMs - positionMs
+    return remainingMs in 0..NEXT_EPISODE_STREAM_PREFETCH_WINDOW_MS
+}
+
 internal fun PlayerRuntimeController.fetchMetaDetails(id: String?, type: String?) {
     if (id.isNullOrBlank() || type.isNullOrBlank()) return
 
@@ -316,7 +337,8 @@ internal fun PlayerRuntimeController.resetPostPlayOverlayState(clearEpisode: Boo
 }
 
 internal fun PlayerRuntimeController.evaluatePostPlayOverlayVisibility(positionMs: Long, durationMs: Long) {
-    if (_playbackTimeline.value.isLive) return
+    val isLive = _playbackTimeline.value.isLive
+    if (isLive) return
     if (!hasRenderedFirstFrame) return
     // Short debrid/error clips must never arm next-episode auto-play (see #2819).
     val effectiveDurationEarly = durationMs.takeIf { it > 0L } ?: lastKnownDuration
@@ -330,6 +352,12 @@ internal fun PlayerRuntimeController.evaluatePostPlayOverlayVisibility(positionM
         }
         return
     }
+    maybePrefetchNextEpisodeStreams(
+        positionMs = positionMs,
+        durationMs = effectiveDurationEarly,
+        state = state,
+        isLive = isLive,
+    )
     if (state.postPlayMode != null || state.postPlayDismissedForCurrentEpisode) return
 
     val effectiveDuration = effectiveDurationEarly
@@ -362,6 +390,55 @@ internal fun PlayerRuntimeController.evaluatePostPlayOverlayVisibility(positionM
         }
         if (state.nextEpisode.hasAired && streamAutoPlayNextEpisodeEnabledSetting) {
             playNextEpisode()
+        }
+    }
+}
+
+private fun PlayerRuntimeController.maybePrefetchNextEpisodeStreams(
+    positionMs: Long,
+    durationMs: Long,
+    state: PlayerUiState,
+    isLive: Boolean,
+) {
+    val nextVideo = nextEpisodeVideo ?: return
+    val type = contentType ?: return
+    val prefetchKey = listOf(
+        type.lowercase(),
+        nextVideo.id,
+        nextVideo.season?.toString().orEmpty(),
+        nextVideo.episode?.toString().orEmpty(),
+    ).joinToString("|")
+    if (!shouldPrefetchNextEpisodeStreams(
+            positionMs = positionMs,
+            durationMs = durationMs,
+            isLive = isLive,
+            hasRenderedFirstFrame = hasRenderedFirstFrame,
+            hasPlaybackError = !state.error.isNullOrBlank(),
+            autoPlayNextEpisodeEnabled = streamAutoPlayNextEpisodeEnabledSetting,
+            nextEpisodeHasAired = state.nextEpisode?.hasAired == true,
+            hasNextEpisode = true,
+            isCloudPlayback = type.equals("cloud", ignoreCase = true),
+            alreadyPrefetched = nextEpisodeStreamPrefetchKey == prefetchKey,
+        )
+    ) {
+        return
+    }
+
+    nextEpisodeStreamPrefetchKey = prefetchKey
+    scope.launch {
+        runCatching {
+            streamRepository.prefetchStreams(
+                type = type,
+                videoId = nextVideo.id,
+                season = nextVideo.season,
+                episode = nextVideo.episode,
+            )
+        }.onFailure { error ->
+            if (error is kotlinx.coroutines.CancellationException) throw error
+            android.util.Log.d(
+                PlayerRuntimeController.TAG,
+                "Next-episode stream prefetch failed for $prefetchKey: ${error.message}",
+            )
         }
     }
 }

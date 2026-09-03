@@ -5,40 +5,40 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Full-bleed charcoal field. The actual mark is deliberately confined
+    <!-- Full-bleed warm-white field. The actual mark is deliberately confined
          to roughly the central 66% so launcher masks/TV cards cannot crop it. -->
     <path
-        android:fillColor="#0B0C0F"
+        android:fillColor="#F4F3F0"
         android:pathData="M0,0H108V108H0Z" />
 
-    <!-- Event-horizon silhouette: flattened luminous ring around a black core. -->
+    <!-- Inverted event-horizon silhouette: charcoal ring around a light core. -->
     <path
-        android:fillColor="#8F939A"
+        android:fillColor="#70747B"
         android:pathData="M20,49 C24,34 39,25 54,25 C69,25 84,34 88,49 C82,40 69,35 54,35 C39,35 26,40 20,49 Z" />
     <path
-        android:fillColor="#D5D7DA"
+        android:fillColor="#2A2825"
         android:pathData="M17,53 C27,46 40,43 54,43 C68,43 81,46 91,53 C79,50 67,49 54,49 C41,49 29,50 17,53 Z" />
     <path
-        android:fillColor="#5A5E65"
+        android:fillColor="#A5A19A"
         android:pathData="M19,57 C30,63 42,66 54,66 C66,66 78,63 89,57 C83,68 69,76 54,76 C39,76 25,68 19,57 Z" />
     <path
-        android:fillColor="#050607"
+        android:fillColor="#FAF9F8"
         android:pathData="M28,51 C33,40 43,35 54,35 C65,35 75,40 80,51 C73,48 64,47 54,47 C44,47 35,48 28,51 Z M28,56 C35,59 44,61 54,61 C64,61 73,59 80,56 C75,66 65,71 54,71 C43,71 33,66 28,56 Z" />
 
     <!-- Compact geometric AIOtv wordmark, kept inside the safe area. -->
     <path
-        android:fillColor="#F2F2F3"
+        android:fillColor="#0D0D0C"
         android:pathData="M29,50 L34,50 L40,64 L36,64 L35,61 L28,61 L27,64 L23,64 Z M29,58 H34 L31.5,53 Z" />
     <path
-        android:fillColor="#D7D8DB"
+        android:fillColor="#282724"
         android:pathData="M42,50 H46 V64 H42 Z" />
     <path
-        android:fillColor="#BFC1C5"
+        android:fillColor="#403E3A"
         android:pathData="M55,50 C61,50 65,53 65,57 C65,62 61,65 55,65 C49,65 47,62 47,57 C47,53 50,50 55,50 Z M55,53 C52,53 51,55 51,57 C51,60 52,62 55,62 C59,62 61,60 61,57 C61,55 59,53 55,53 Z" />
     <path
-        android:fillColor="#96999F"
+        android:fillColor="#696660"
         android:pathData="M67,52 H71 V55 H74 V58 H71 V61 C71,62 72,62 74,62 V65 C69,65 67,63 67,60 V58 H65 V55 H67 Z" />
     <path
-        android:fillColor="#777B82"
+        android:fillColor="#88847D"
         android:pathData="M74,55 H78 L81,61 L84,55 H88 L82,65 H79 Z" />
 </vector>
