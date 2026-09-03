@@ -20,7 +20,8 @@ import { loadConfig } from './config.mjs';
 import { openDatabase } from './database.mjs';
 
 const COOKIE_NAME = 'aiotv_admin';
-const MAX_BODY_BYTES = 2 * 1024 * 1024;
+const MAX_BODY_BYTES = 10 * 1024 * 1024;
+const MAX_COLLECTION_BYTES = 10_000_000;
 
 function cleanText(value, maximum = 100) {
   return String(value ?? '').trim().replace(/\s+/g, ' ').slice(0, maximum);
@@ -114,8 +115,8 @@ async function inspectManifest(manifestUrl, allowHttp) {
 
 function inspectCollectionJson(value) {
   const text = typeof value === 'string' ? value.trim() : JSON.stringify(value ?? null);
-  if (!text || Buffer.byteLength(text) > 1_500_000) {
-    throw Object.assign(new Error('Collection file is empty or larger than 1.5 MB'), { statusCode: 400 });
+  if (!text || Buffer.byteLength(text) > MAX_COLLECTION_BYTES) {
+    throw Object.assign(new Error('Collection file is empty or larger than 10 MB'), { statusCode: 400 });
   }
   let collections;
   try {

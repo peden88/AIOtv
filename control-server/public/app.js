@@ -1,5 +1,6 @@
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+const MAX_COLLECTION_BYTES = 10_000_000;
 
 const state = {
   csrfToken: '',
@@ -597,13 +598,19 @@ $('#add-collection-form').addEventListener('submit', async (event) => {
     if (!(file instanceof File) || !file.name.toLowerCase().endsWith('.json')) {
       throw new Error('Choose a .json collections file.');
     }
-    if (file.size > 1_500_000) throw new Error('Collection file must be 1.5 MB or smaller.');
+    if (file.size > MAX_COLLECTION_BYTES) throw new Error('Collection file must be 10 MB or smaller.');
+    let collectionJson;
+    try {
+      collectionJson = JSON.parse(await file.text());
+    } catch {
+      throw new Error('Collection file must contain valid JSON.');
+    }
     const fallbackName = file.name.replace(/\.json$/i, '').replaceAll(/[-_]+/g, ' ');
     await api(`/api/admin/groups/${state.currentGroup.id}/collections`, {
       method: 'POST',
       body: {
         name: String(fields.get('name') || fallbackName).trim(),
-        collectionJson: await file.text(),
+        collectionJson,
       },
     });
     form.reset();

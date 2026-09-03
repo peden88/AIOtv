@@ -53,6 +53,8 @@ test('administrator passwords may contain a single character', async (t) => {
   const base = `http://127.0.0.1:${address.port}`;
   const home = await fetch(`${base}/`);
   assert.doesNotMatch(await home.text(), /minlength=["']12["']/);
+  const dashboardScript = await fetch(`${base}/app.js`);
+  assert.match(await dashboardScript.text(), /MAX_COLLECTION_BYTES = 10_000_000/);
 
   const login = await read(await fetch(`${base}/api/admin/login`, {
     method: 'POST',
@@ -147,14 +149,49 @@ test('administrator can create a profile and pair, bootstrap, then revoke a TV',
   assert.equal(collection.response.status, 201);
   assert.equal(collection.payload.data.collectionCount, 1);
 
+  const largeCollectionJson = JSON.stringify([{
+    id: 'large-collection',
+    title: 'Large collection',
+    folders: [],
+    padding: 'x'.repeat(2_100_000),
+  }]);
+  const largeCollection = await read(await adminRequest(`/api/admin/groups/${groupId}/collections`, {
+    method: 'POST',
+    body: JSON.stringify({
+      name: 'Large collection',
+      collectionJson: largeCollectionJson,
+    }),
+  }));
+  assert.equal(largeCollection.response.status, 201);
+  assert.equal(largeCollection.payload.data.collectionCount, 1);
+
+  const oversizedCollection = await read(await adminRequest(`/api/admin/groups/${groupId}/collections`, {
+    method: 'POST',
+    body: JSON.stringify({
+      name: 'Oversized collection',
+      collectionJson: JSON.stringify([{
+        id: 'oversized-collection',
+        title: 'Oversized collection',
+        folders: [],
+        padding: 'x'.repeat(10_000_000),
+      }]),
+    }),
+  }));
+  assert.equal(oversizedCollection.response.status, 400);
+  assert.equal(oversizedCollection.payload.error.code, 'invalid_collection');
+  assert.match(oversizedCollection.payload.error.message, /larger than 10 MB/);
+
   const reordered = await read(await adminRequest(`/api/admin/groups/${groupId}/resources/order`, {
     method: 'PUT',
     body: JSON.stringify({
-      resourceIds: [collection.payload.data.id, addon.payload.data.id],
+      resourceIds: [collection.payload.data.id, largeCollection.payload.data.id, addon.payload.data.id],
     }),
   }));
   assert.equal(reordered.response.status, 200);
-  assert.deepEqual(reordered.payload.data.resources.map((resource) => resource.type), ['collection', 'addon']);
+  assert.deepEqual(
+    reordered.payload.data.resources.map((resource) => resource.type),
+    ['collection', 'collection', 'addon'],
+  );
 
   const start = await read(await fetch(`${base}/api/v1/pairings`, {
     method: 'POST',
@@ -205,7 +242,7 @@ test('administrator can create a profile and pair, bootstrap, then revoke a TV',
   assert.equal(bootstrap.payload.data.profile.name, 'Gary');
   assert.equal(bootstrap.payload.data.device.name, 'Gary’s living room TV');
   assert.equal(bootstrap.payload.data.policy.addons.length, 1);
-  assert.equal(bootstrap.payload.data.policy.collections.length, 1);
+  assert.equal(bootstrap.payload.data.policy.collections.length, 2);
   assert.equal(bootstrap.payload.data.policy.collections[0].name, 'Gary picks');
   assert.equal(bootstrap.payload.data.management.catalogOrder, 'administrator');
   assert.ok(etag);
