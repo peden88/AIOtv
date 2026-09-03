@@ -20,24 +20,22 @@ class AioTvAuthStore @Inject constructor(
 ) {
     data class Session(
         val accessToken: String,
-        val uuid: String,
-        val expiresAtEpochMs: Long,
+        val deviceId: String,
         val bootstrapEtag: String?,
-        val policyRevision: Int
-    ) {
-        val isExpired: Boolean
-            get() = expiresAtEpochMs <= System.currentTimeMillis()
-    }
+        val policyRevision: Int,
+        val lastValidatedAtEpochMs: Long
+    )
 
     companion object {
-        private const val PREFS = "aio_tv_managed_session"
-        private const val KEY_ALIAS = "aio_tv_device_token_v1"
+        private const val PREFS = "aio_tv_control_session_v1"
+        private const val KEY_ALIAS = "aio_tv_control_device_token_v1"
         private const val TOKEN = "token_ciphertext"
-        private const val UUID = "uuid"
-        private const val EXPIRES_AT = "expires_at"
+        private const val DEVICE_ID = "device_id"
         private const val BOOTSTRAP_ETAG = "bootstrap_etag"
         private const val POLICY_REVISION = "policy_revision"
+        private const val LAST_VALIDATED_AT = "last_validated_at"
         private const val TRANSFORMATION = "AES/GCM/NoPadding"
+        private const val OFFLINE_GRACE_MS = 7L * 24L * 60L * 60L * 1000L
     }
 
     private val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -45,20 +43,15 @@ class AioTvAuthStore @Inject constructor(
     @Synchronized
     fun load(): Session? {
         val encrypted = prefs.getString(TOKEN, null) ?: return null
-        val uuid = prefs.getString(UUID, null)?.takeIf { it.isNotBlank() } ?: return null
-        val expiresAt = prefs.getLong(EXPIRES_AT, 0L)
-        if (expiresAt <= System.currentTimeMillis()) {
-            clear()
-            return null
-        }
+        val deviceId = prefs.getString(DEVICE_ID, null)?.takeIf { it.isNotBlank() } ?: return null
 
         return try {
             Session(
                 accessToken = decrypt(encrypted),
-                uuid = uuid,
-                expiresAtEpochMs = expiresAt,
+                deviceId = deviceId,
                 bootstrapEtag = prefs.getString(BOOTSTRAP_ETAG, null),
-                policyRevision = prefs.getInt(POLICY_REVISION, 0)
+                policyRevision = prefs.getInt(POLICY_REVISION, 0),
+                lastValidatedAtEpochMs = prefs.getLong(LAST_VALIDATED_AT, 0L)
             )
         } catch (_: Exception) {
             // A restored backup, lock-screen reset, or Keystore invalidation can
@@ -69,26 +62,38 @@ class AioTvAuthStore @Inject constructor(
     }
 
     @Synchronized
-    fun saveSession(accessToken: String, uuid: String, expiresInSeconds: Int) {
-        val expiresAt = System.currentTimeMillis() + expiresInSeconds.coerceAtLeast(1) * 1000L
+    fun saveSession(accessToken: String, deviceId: String) {
         prefs.edit()
             .putString(TOKEN, encrypt(accessToken))
-            .putString(UUID, uuid)
-            .putLong(EXPIRES_AT, expiresAt)
+            .putString(DEVICE_ID, deviceId)
             .remove(BOOTSTRAP_ETAG)
             .putInt(POLICY_REVISION, 0)
+            .putLong(LAST_VALIDATED_AT, 0L)
             .apply()
     }
 
     @Synchronized
-    fun saveBootstrapMetadata(etag: String?, policyRevision: Int) {
+    fun saveBootstrapMetadata(
+        etag: String?,
+        policyRevision: Int,
+        validatedAtEpochMs: Long = System.currentTimeMillis()
+    ) {
         val editor = prefs.edit()
         if (etag.isNullOrBlank()) {
             editor.remove(BOOTSTRAP_ETAG)
         } else {
             editor.putString(BOOTSTRAP_ETAG, etag)
         }
-        editor.putInt(POLICY_REVISION, policyRevision).apply()
+        editor
+            .putInt(POLICY_REVISION, policyRevision)
+            .putLong(LAST_VALIDATED_AT, validatedAtEpochMs)
+            .apply()
+    }
+
+    fun canUseOfflinePolicy(session: Session, nowEpochMs: Long = System.currentTimeMillis()): Boolean {
+        return session.policyRevision > 0 &&
+            session.lastValidatedAtEpochMs > 0L &&
+            nowEpochMs - session.lastValidatedAtEpochMs <= OFFLINE_GRACE_MS
     }
 
     @Synchronized

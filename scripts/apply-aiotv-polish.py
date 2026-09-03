@@ -24,6 +24,21 @@ def replace_required(rel, old, new, count=1):
     print(f'AIOtv polish: updated {rel}')
 
 
+def replace_or_already(rel, old, new, count=1):
+    text = read(rel)
+    if text.count(new) >= count:
+        print(f'AIOtv polish: already applied in {rel}: {new!r}')
+        return
+    found = text.count(old)
+    if found < count:
+        raise SystemExit(
+            f'AIOtv polish: expected either source or branded value in {rel}; '
+            f'found {found} source occurrence(s): {old!r}'
+        )
+    write(rel, text.replace(old, new, count))
+    print(f'AIOtv polish: updated {rel}')
+
+
 def remove_between(rel, start, end):
     text = read(rel)
     i = text.find(start)
@@ -36,16 +51,17 @@ def remove_between(rel, start, end):
     write(rel, text)
     print(f'AIOtv polish: removed P2P settings UI from {rel}')
 
-# Launcher / TV dashboard branding.
-replace_required(
+# Launcher / TV dashboard branding. Accept either pristine upstream resources or
+# an already-branded manifest so UI/branding branches can carry canonical assets.
+replace_or_already(
     'app/src/main/AndroidManifest.xml',
     'android:banner="@mipmap/banner"',
     'android:banner="@drawable/aiotv_tv_banner"'
 )
-replace_required(
+replace_or_already(
     'app/src/main/AndroidManifest.xml',
     'android:icon="@mipmap/ic_launcher"',
-    'android:icon="@drawable/aiotv_app_icon"'
+    'android:icon="@drawable/aiotv_launcher"'
 )
 
 # Hide the entire Integrations settings tab. Plugins are disabled by AppFeaturePolicy in the full flavour.
@@ -60,7 +76,6 @@ replace_required(
 # that migration flag is written, users are free to change these values normally.
 player_file = 'app/src/main/java/com/nuvio/tv/data/local/PlayerSettingsDataStore.kt'
 for old, new in [
-    # Data-class defaults.
     ('val useForcedSubtitles: Boolean = false,', 'val useForcedSubtitles: Boolean = true,'),
     ('val showOnlyPreferredLanguages: Boolean = false,', 'val showOnlyPreferredLanguages: Boolean = true,'),
     ('val internalPlayerEngine: InternalPlayerEngine = InternalPlayerEngine.EXOPLAYER,', 'val internalPlayerEngine: InternalPlayerEngine = InternalPlayerEngine.AUTO,'),
@@ -69,9 +84,6 @@ for old, new in [
     ('val streamAutoPlayMode: StreamAutoPlayMode = StreamAutoPlayMode.MANUAL,', 'val streamAutoPlayMode: StreamAutoPlayMode = StreamAutoPlayMode.FIRST_STREAM,'),
     ('val streamAutoPlaySource: StreamAutoPlaySource = StreamAutoPlaySource.ALL_SOURCES,', 'val streamAutoPlaySource: StreamAutoPlaySource = StreamAutoPlaySource.INSTALLED_ADDONS_ONLY,'),
     ('val streamAutoPlayNextEpisodeEnabled: Boolean = false,', 'val streamAutoPlayNextEpisodeEnabled: Boolean = true,'),
-
-    # PlayerSettingsDataStore read-time fallbacks. These are what the UI actually
-    # sees when no preference has yet been persisted.
     ('runCatching { InternalPlayerEngine.valueOf(it) }.getOrDefault(InternalPlayerEngine.EXOPLAYER)', 'runCatching { InternalPlayerEngine.valueOf(it) }.getOrDefault(InternalPlayerEngine.AUTO)'),
     ('} ?: InternalPlayerEngine.EXOPLAYER,', '} ?: InternalPlayerEngine.AUTO,'),
     ('parentalGuideEnabled = prefs[parentalGuideEnabledKey] ?: true,', 'parentalGuideEnabled = prefs[parentalGuideEnabledKey] ?: false,'),
@@ -86,9 +98,6 @@ for old, new in [
 ]:
     replace_required(player_file, old, new)
 
-# Add a versioned one-time migration so an installed pre-defaults test build gets
-# the AIOtv baseline exactly once. This intentionally establishes the product
-# baseline on upgrade; subsequent app starts never overwrite user changes.
 replace_required(
     player_file,
     '    private val migrationTargetBufferSizeReducedDoneKey = booleanPreferencesKey("migration_target_buffer_size_reduced_done")\n',

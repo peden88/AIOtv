@@ -8,9 +8,9 @@ import com.nuvio.tv.domain.model.UserProfile
 internal object AddonManagementAccess {
 
     /**
-     * AIOtv addons are account policy, not a device preference. The central AIO
-     * account-management service is the only writer; every TV profile sees the
-     * resulting addon set as read-only.
+     * AIOtv addons are managed-user policy, not a device preference. AIOtv
+     * Control is the only writer; every TV sees the resulting addon set as
+     * read-only.
      */
     fun isReadOnly(profile: UserProfile?): Boolean {
         if (AioProductPolicy.ADMIN_MANAGED_ADDONS) return true

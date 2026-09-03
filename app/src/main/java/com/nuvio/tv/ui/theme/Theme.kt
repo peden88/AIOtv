@@ -23,17 +23,17 @@ data class NuvioExtendedColors(
 )
 
 val LocalNuvioColors = staticCompositionLocalOf {
-    NuvioColorScheme(ThemeColors.AioStreams)
+    NuvioColorScheme(ThemeColors.AioTv)
 }
 
 val LocalNuvioExtendedColors = staticCompositionLocalOf {
     NuvioExtendedColors(
-        backgroundElevated = ThemeColors.AioStreams.backgroundElevated,
-        backgroundCard = ThemeColors.AioStreams.backgroundCard,
+        backgroundElevated = ThemeColors.AioTv.backgroundElevated,
+        backgroundCard = ThemeColors.AioTv.backgroundCard,
         textSecondary = Color(0xFFB3B3B3),
         textTertiary = Color(0xFF808080),
-        focusRing = ThemeColors.AioStreams.focusRing,
-        focusBackground = ThemeColors.AioStreams.focusBackground,
+        focusRing = ThemeColors.AioTv.focusRing,
+        focusBackground = ThemeColors.AioTv.focusBackground,
         rating = Color(0xFFFFD700)
     )
 }
@@ -45,7 +45,7 @@ val LocalAppTheme = staticCompositionLocalOf { AppTheme.WHITE }
 val LocalSettingsUiStyle = staticCompositionLocalOf { SettingsUiStyle.CLASSIC }
 
 val LocalNuvioFocusRingStyle = staticCompositionLocalOf {
-    createFocusRingStyle(ThemeColors.AioStreams)
+    createFocusRingStyle(ThemeColors.AioTv)
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -62,7 +62,7 @@ fun NuvioTheme(
     // AIOtv is a managed product rather than a themeable Nuvio distribution.
     // Preserve NuvioTheme's public signature so upstream call-sites remain easy
     // to merge, but deliberately ignore persisted visual customisation values.
-    val palette = ThemeColors.AioStreams
+    val palette = ThemeColors.AioTv
     val focusRingStyle = createFocusRingStyle(palette)
     val colorScheme = NuvioColorScheme(
         palette = palette,

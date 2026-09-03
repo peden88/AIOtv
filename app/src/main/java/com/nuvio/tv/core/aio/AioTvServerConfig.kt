@@ -1,11 +1,12 @@
 package com.nuvio.tv.core.aio
 
+import com.nuvio.tv.BuildConfig
+
 object AioTvServerConfig {
     /**
-     * First AIOtv test deployment target.
-     *
-     * This is the Pangolin-exposed AIOStreams origin reachable by both the TV
-     * and the user's phone. No trailing slash.
+     * Standalone AIOtv Control origin compiled into this APK. No trailing slash.
+     * Configure AIOTV_CONTROL_URL in local.properties or the build environment.
      */
-    const val BASE_URL: String = "https://aiohealth.peden88.stream"
+    val BASE_URL: String
+        get() = BuildConfig.AIOTV_CONTROL_URL
 }

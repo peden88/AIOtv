@@ -70,6 +70,15 @@ val sentryOrg = providers.environmentVariable("SENTRY_ORG").orNull?.trim()?.take
 val sentryProject = providers.environmentVariable("SENTRY_PROJECT").orNull?.trim()?.takeIf { it.isNotBlank() }
     ?: resolveProperty(devProperties, localProperties, "SENTRY_PROJECT").takeIf { it.isNotBlank() }
 val sentryMappingUploadEnabled = sentryAuthToken != null && sentryOrg != null && sentryProject != null
+val aiotvControlUrl = providers.environmentVariable("AIOTV_CONTROL_URL").orNull
+    ?.trim()
+    ?.takeIf { it.isNotBlank() }
+    ?: resolveProperty(
+        devProperties,
+        localProperties,
+        "AIOTV_CONTROL_URL",
+        "https://aiocontrol.peden88.stream"
+    )
 
 fun env(name: String): String? = providers.environmentVariable(name).orNull
 
@@ -143,6 +152,7 @@ android {
         buildConfigField("String", "PREMIUMIZE_CLIENT_ID", "\"${localProperties.getProperty("PREMIUMIZE_CLIENT_ID", "")}\"")
         buildConfigField("String", "SPONSOR_NAMES", buildConfigString(sponsorNames))
         buildConfigField("String", "SENTRY_DSN", buildConfigString(sentryDsn))
+        buildConfigField("String", "AIOTV_CONTROL_URL", buildConfigString(aiotvControlUrl))
 
         // In-app updater (GitHub Releases)
         buildConfigField("String", "GITHUB_OWNER", "\"NuvioMedia\"")

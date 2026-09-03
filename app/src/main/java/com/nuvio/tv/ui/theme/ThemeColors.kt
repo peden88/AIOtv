@@ -27,14 +27,11 @@ data class ThemeColorPalette(
 
 object ThemeColors {
     /**
-     * AIOtv's single product palette, derived from the AIOStreams configuration UI.
-     *
-     * AIOStreams uses #070707 as its dark background with the #6152DF brand purple
-     * and related violet shades for interactive/focus states. Keeping these values in
-     * one palette lets us retain Nuvio's mature TV component system while presenting a
-     * consistent AIO visual identity.
+     * AIOtv's single dark product palette. The near-black background keeps film
+     * artwork prominent while the brand purple provides a consistent focus and
+     * primary-action treatment across television and administrator surfaces.
      */
-    val AioStreams = ThemeColorPalette(
+    val AioTv = ThemeColorPalette(
         secondary = Color(0xFF6152DF),
         secondaryVariant = Color(0xFF5243CB),
         onSecondary = NuvioPrimitives.white,

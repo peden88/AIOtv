@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+
+    <path android:fillColor="#0B0C0F" android:pathData="M0,0H320V180H0Z" />
+
+    <!-- Wide event horizon, intentionally held well inside the 320x180 frame. -->
+    <path
+        android:fillColor="#686C73"
+        android:pathData="M48,80 C67,48 108,35 155,38 C205,41 240,56 259,80 C229,65 196,60 159,60 C119,60 82,66 48,80 Z" />
+    <path
+        android:fillColor="#D9DBDE"
+        android:pathData="M32,89 C69,77 111,73 156,74 C201,75 241,80 282,91 C237,85 198,83 158,83 C111,83 69,86 32,94 Z" />
+    <path
+        android:fillColor="#454950"
+        android:pathData="M44,99 C78,120 116,130 158,130 C201,130 238,118 272,98 C250,130 207,147 158,147 C109,147 66,130 44,99 Z" />
+    <path
+        android:fillColor="#050607"
+        android:pathData="M81,86 C99,58 126,50 157,51 C188,52 215,62 234,86 C211,80 186,78 159,78 C130,78 104,81 81,86 Z M79,98 C103,105 130,109 159,109 C188,109 215,105 239,97 C220,125 191,136 158,136 C124,136 96,124 79,98 Z" />
+
+    <!-- AIOtv wordmark centred over the silhouette. -->
+    <path android:fillColor="#F3F3F4" android:pathData="M96,70 L108,70 L123,108 L112,108 L109,99 L94,99 L91,108 L80,108 Z M97,92 H106 L102,78 Z" />
+    <path android:fillColor="#D6D7DA" android:pathData="M130,70 H140 V108 H130 Z" />
+    <path android:fillColor="#BABCC1" android:pathData="M164,69 C181,69 193,77 193,89 C193,101 181,109 164,109 C147,109 144,101 144,89 C144,77 151,69 164,69 Z M164,77 C155,77 153,81 153,89 C153,97 157,101 164,101 C176,101 184,97 184,89 C184,81 176,77 164,77 Z" />
+    <path android:fillColor="#96999F" android:pathData="M203,73 H213 V81 H222 V89 H213 V98 C213,101 217,101 222,100 V108 C208,110 203,105 203,96 V89 H197 V81 H203 Z" />
+    <path android:fillColor="#74787F" android:pathData="M227,81 H238 L248,100 L259,81 H270 L253,109 H243 Z" />
+</vector>

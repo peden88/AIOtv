@@ -1,9 +1,11 @@
 name: PR Full Debug Build
 
 on:
+  push:
+    branches: [feature/aiotv-control-mvp]
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    branches: [dev]
+    branches: [dev, feature/aio-device-auth]
   workflow_dispatch:
 
 permissions:
@@ -57,10 +59,17 @@ jobs:
             echo "NUVIO_RELEASE_STORE_PASSWORD=aiotvtest"
           } >> "$GITHUB_ENV"
 
-      - name: Apply AIOtv product polish
-        run: python3 scripts/apply-aiotv-polish.py
+      - name: Apply AIOtv product and UI layers
+        run: |
+          python3 scripts/apply-aiotv-polish.py
+          python3 scripts/apply-aiotv-ui-refresh.py
+          python3 scripts/apply-aiotv-shell.py
+          python3 scripts/apply-aiotv-surfaces.py
+          python3 scripts/apply-aiotv-player.py
 
       - name: Test updater and build fullDebug APK
+        env:
+          AIOTV_CONTROL_URL: ${{ vars.AIOTV_CONTROL_URL }}
         run: ./gradlew :app:testFullDebugUnitTest --tests 'com.nuvio.tv.updater.*' :app:assembleFullDebug --stacktrace
 
       - name: Upload fullDebug APK
@@ -90,6 +99,6 @@ jobs:
               "$RELEASE_APK" \
               --target "$HEAD_SHA" \
               --title 'AIOtv Test Build' \
-              --notes 'Latest installable AIOtv test APK. This asset is replaced on each successful test build.' \
+              --notes 'Latest installable managed AIOtv build. This asset is replaced on each successful test build.' \
               --prerelease
           fi

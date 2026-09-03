@@ -22,7 +22,7 @@ class ProfileSettingsViewModel @Inject constructor(
     val profiles: StateFlow<List<UserProfile>> = profileManager.profiles
 
     /**
-     * AIOtv uses one administrator-managed Pocket ID identity. Keep upstream
+     * AIOtv uses one administrator-assigned Control profile. Keep upstream
      * Nuvio account/profile management sections hidden while retaining the
      * latest ProfileManager implementation underneath.
      */

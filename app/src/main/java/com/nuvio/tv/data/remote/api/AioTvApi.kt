@@ -14,13 +14,13 @@ import retrofit2.http.Url
 
 interface AioTvApi {
     @POST
-    suspend fun startDeviceAuth(
+    suspend fun startPairing(
         @Url url: String,
         @Body body: Map<String, String> = emptyMap()
     ): Response<AioTvApiEnvelope<AioTvDeviceStartData>>
 
     @POST
-    suspend fun pollDeviceToken(
+    suspend fun pollPairing(
         @Url url: String,
         @Body body: AioTvDeviceTokenRequest
     ): Response<AioTvApiEnvelope<AioTvDeviceTokenData>>

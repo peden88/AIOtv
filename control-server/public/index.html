@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#070707">
+    <title>AIOtv Control</title>
+    <meta name="description" content="Pair AIOtv devices and manage administrator-assigned addon profiles.">
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/app.js?v=20260903-2" type="module"></script>
+  </head>
+  <body>
+    <main id="login-view" class="login-shell" hidden>
+      <section class="login-panel" aria-labelledby="login-title">
+        <div class="brand-mark" aria-hidden="true">A</div>
+        <p class="eyebrow">AIOtv</p>
+        <h1 id="login-title">Administrator access</h1>
+        <p class="muted">Sign in to pair TVs and manage assigned addons.</p>
+        <form id="login-form" class="stack">
+          <label for="admin-password">Administrator password</label>
+          <input id="admin-password" name="password" type="password" autocomplete="current-password" required autofocus>
+          <button class="button button-primary" type="submit">Sign in</button>
+          <p id="login-error" class="form-error" role="alert"></p>
+        </form>
+      </section>
+    </main>
+
+    <div id="app-view" class="app-shell" hidden>
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="AIOtv Control home">
+          <span class="brand-mark brand-mark-small" aria-hidden="true">A</span>
+          <span>
+            <strong>AIOtv</strong>
+            <small>Control</small>
+          </span>
+        </a>
+        <div class="topbar-actions">
+          <span id="connection-status" class="status-pill"><span class="status-dot"></span>Connected</span>
+          <button id="logout-button" class="button button-quiet" type="button">Sign out</button>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <section class="pair-panel" aria-labelledby="pair-heading">
+          <div>
+            <p class="eyebrow">New television</p>
+            <h1 id="pair-heading">Pair a TV</h1>
+            <p>Enter the eight-character code shown in AIOtv, then choose the managed user for that television.</p>
+          </div>
+          <form id="pair-form" class="pair-form">
+            <label class="sr-only" for="pair-code">TV pairing code</label>
+            <input id="pair-code" name="code" class="code-input" inputmode="text" autocomplete="one-time-code" placeholder="ABCD-EFGH" maxlength="9" required>
+            <button class="button button-light" type="submit">Find TV</button>
+          </form>
+          <p id="pair-error" class="form-error" role="alert"></p>
+        </section>
+
+        <section class="summary-row" aria-label="Dashboard summary">
+          <article class="metric">
+            <span>Managed users</span>
+            <strong id="user-count">0</strong>
+          </article>
+          <article class="metric">
+            <span>Paired TVs</span>
+            <strong id="device-count">0</strong>
+          </article>
+          <article class="metric">
+            <span>Addon groups</span>
+            <strong id="group-count">0</strong>
+          </article>
+          <article class="metric">
+            <span>Managed resources</span>
+            <strong id="resource-count">0</strong>
+          </article>
+          <article class="metric metric-pending">
+            <span>Waiting to pair</span>
+            <strong id="pending-count">0</strong>
+          </article>
+        </section>
+
+        <nav class="page-tabs" aria-label="Control sections">
+          <button class="page-tab is-active" type="button" data-page-target="users-page">Users</button>
+          <button class="page-tab" type="button" data-page-target="groups-page">Addon groups</button>
+        </nav>
+
+        <div class="content-grid">
+          <div class="primary-column">
+          <section id="users-page" class="dashboard-page" aria-labelledby="users-heading">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Profiles</p>
+                <h2 id="users-heading">Managed users</h2>
+              </div>
+              <button id="new-user-button" class="button button-primary" type="button">Create user</button>
+            </div>
+            <div id="users-grid" class="users-grid"></div>
+            <div id="users-empty" class="empty-state" hidden>
+              <div class="empty-icon" aria-hidden="true">+</div>
+              <h3>Create your first managed user</h3>
+              <p>Each user has an administrator-owned addon group that can be shared by several TVs.</p>
+              <button class="button button-primary" type="button" data-action="new-user">Create user</button>
+            </div>
+          </section>
+
+          <section id="groups-page" class="dashboard-page" aria-labelledby="groups-heading" hidden>
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Reusable policies</p>
+                <h2 id="groups-heading">Addon groups</h2>
+                <p>Build ordered sets of addons and collection files, then assign them to users.</p>
+              </div>
+              <button id="new-group-button" class="button button-primary" type="button">Create group</button>
+            </div>
+            <div id="groups-grid" class="users-grid"></div>
+            <div id="groups-empty" class="empty-state" hidden>
+              <div class="empty-icon" aria-hidden="true">+</div>
+              <h3>Create your first addon group</h3>
+              <p>Groups are reusable server-managed addon and collection policies.</p>
+              <button class="button button-primary" type="button" data-action="new-group">Create group</button>
+            </div>
+          </section>
+          </div>
+
+          <aside class="activity-panel" aria-labelledby="activity-heading">
+            <div class="section-heading section-heading-compact">
+              <div>
+                <p class="eyebrow">Audit</p>
+                <h2 id="activity-heading">Recent activity</h2>
+              </div>
+            </div>
+            <ol id="activity-list" class="activity-list"></ol>
+            <p id="activity-empty" class="muted">Changes will appear here.</p>
+          </aside>
+        </div>
+      </main>
+    </div>
+
+    <dialog id="new-user-dialog" class="dialog">
+      <form id="new-user-form" class="dialog-card">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">Managed profile</p>
+            <h2>Create user</h2>
+          </div>
+          <button class="icon-button" type="button" data-close-dialog aria-label="Close">×</button>
+        </div>
+        <label for="new-user-name">Display name</label>
+        <input id="new-user-name" name="name" autocomplete="off" maxlength="80" placeholder="e.g. Gary" required>
+        <label for="new-user-group">Addon group</label>
+        <select id="new-user-group" name="groupId"></select>
+        <p class="field-help">The group controls which addons and collections appear on this user's TVs.</p>
+        <p class="form-error" data-form-error role="alert"></p>
+        <div class="dialog-actions">
+          <button class="button button-quiet" type="button" data-close-dialog>Cancel</button>
+          <button class="button button-primary" type="submit">Create user</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="new-group-dialog" class="dialog">
+      <form id="new-group-form" class="dialog-card">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">Managed resources</p>
+            <h2>Create addon group</h2>
+          </div>
+          <button class="icon-button" type="button" data-close-dialog aria-label="Close">×</button>
+        </div>
+        <label for="new-group-name">Group name</label>
+        <input id="new-group-name" name="name" autocomplete="off" maxlength="80" placeholder="e.g. Family" required>
+        <p class="field-help">A group can be assigned to any number of users.</p>
+        <p class="form-error" data-form-error role="alert"></p>
+        <div class="dialog-actions">
+          <button class="button button-quiet" type="button" data-close-dialog>Cancel</button>
+          <button class="button button-primary" type="submit">Create group</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="pair-dialog" class="dialog">
+      <form id="pair-approval-form" class="dialog-card dialog-card-wide">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">Pending television</p>
+            <h2>Assign this TV</h2>
+          </div>
+          <button class="icon-button" type="button" data-close-dialog aria-label="Close">×</button>
+        </div>
+        <div id="pair-device-summary" class="device-summary"></div>
+        <input id="pair-request-id" name="pairingId" type="hidden">
+        <div class="form-grid">
+          <div>
+            <label for="pair-user">Managed user</label>
+            <select id="pair-user" name="userId" required></select>
+          </div>
+          <div>
+            <label for="pair-device-name">TV name</label>
+            <input id="pair-device-name" name="deviceName" maxlength="80" placeholder="Living room TV" required>
+          </div>
+        </div>
+        <p class="form-error" data-form-error role="alert"></p>
+        <div class="dialog-actions">
+          <button class="button button-quiet" type="button" data-close-dialog>Cancel</button>
+          <button class="button button-primary" type="submit">Pair TV</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="user-dialog" class="dialog dialog-large">
+      <div class="dialog-card dialog-card-profile">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">Managed profile</p>
+            <h2 id="profile-name">User</h2>
+          </div>
+          <button class="icon-button" type="button" data-close-dialog aria-label="Close">×</button>
+        </div>
+
+        <div class="profile-toolbar">
+          <span id="profile-status" class="status-pill"></span>
+          <span id="profile-revision" class="muted"></span>
+          <button id="toggle-user-button" class="button button-quiet button-small" type="button"></button>
+          <button id="delete-user-button" class="button button-danger button-small" type="button">Delete user</button>
+        </div>
+
+        <section class="profile-section" aria-labelledby="profile-group-heading">
+          <div class="section-heading section-heading-compact">
+            <div>
+              <h3 id="profile-group-heading">Assigned addon group</h3>
+              <p>Changing this updates every paired TV on its next policy refresh.</p>
+            </div>
+          </div>
+          <form id="assign-group-form" class="inline-form">
+            <select id="profile-group" name="groupId"></select>
+            <button class="button button-primary" type="submit">Save group</button>
+          </form>
+          <p id="assign-group-error" class="form-error" role="alert"></p>
+        </section>
+
+        <section class="profile-section" aria-labelledby="profile-devices-heading">
+          <div class="section-heading section-heading-compact">
+            <div>
+              <h3 id="profile-devices-heading">Paired TVs</h3>
+              <p>Revoking a TV forces a new administrator-approved code.</p>
+            </div>
+          </div>
+          <div id="profile-devices" class="managed-list"></div>
+        </section>
+      </div>
+    </dialog>
+
+    <dialog id="group-dialog" class="dialog dialog-large">
+      <div class="dialog-card dialog-card-profile">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">Addon group</p>
+            <h2 id="group-name">Group</h2>
+          </div>
+          <button class="icon-button" type="button" data-close-dialog aria-label="Close">×</button>
+        </div>
+
+        <div class="profile-toolbar">
+          <span id="group-user-count" class="status-pill"></span>
+          <span id="group-resource-count" class="muted"></span>
+          <button id="delete-group-button" class="button button-danger button-small" type="button">Delete group</button>
+        </div>
+
+        <section class="profile-section" aria-labelledby="group-resources-heading">
+          <div class="section-heading section-heading-compact">
+            <div>
+              <h3 id="group-resources-heading">Ordered resources</h3>
+              <p>Use the arrow controls to set the server-managed addon and collection order.</p>
+            </div>
+          </div>
+          <div id="group-resources" class="managed-list"></div>
+        </section>
+
+        <section class="profile-section" aria-labelledby="group-add-addon-heading">
+          <div class="section-heading section-heading-compact">
+            <div>
+              <h3 id="group-add-addon-heading">Add an addon</h3>
+            </div>
+          </div>
+          <form id="add-addon-form" class="addon-form">
+            <div>
+              <label for="addon-url">Configured manifest URL</label>
+              <input id="addon-url" name="manifestUrl" type="url" placeholder="https://example.com/config/manifest.json" required>
+            </div>
+            <div>
+              <label for="addon-name">Name override <span class="muted">optional</span></label>
+              <input id="addon-name" name="name" maxlength="120" placeholder="Fetched automatically">
+            </div>
+            <button class="button button-primary" type="submit">Add addon</button>
+          </form>
+          <p id="addon-error" class="form-error" role="alert"></p>
+        </section>
+
+        <section class="profile-section" aria-labelledby="group-add-collection-heading">
+          <div class="section-heading section-heading-compact">
+            <div>
+              <h3 id="group-add-collection-heading">Add collection file</h3>
+              <p>Upload an AIOtv collections JSON export. Its collections are applied automatically when a device signs in.</p>
+            </div>
+          </div>
+          <form id="add-collection-form" class="collection-form">
+            <div>
+              <label for="collection-file">Collections .json file</label>
+              <input id="collection-file" name="collectionFile" type="file" accept="application/json,.json" required>
+            </div>
+            <div>
+              <label for="collection-name">Label <span class="muted">optional</span></label>
+              <input id="collection-name" name="name" maxlength="120" placeholder="Uses collection title">
+            </div>
+            <button class="button button-primary" type="submit">Add collections</button>
+          </form>
+          <p id="collection-error" class="form-error" role="alert"></p>
+        </section>
+      </div>
+    </dialog>
+
+    <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
+  </body>
+</html>
