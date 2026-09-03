@@ -404,12 +404,13 @@ document.addEventListener('click', (event) => {
 $('#login-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
+  const password = new FormData(form).get('password');
   setError($('#login-error'));
   setBusy(form, true);
   try {
     const session = await api('/api/admin/login', {
       method: 'POST',
-      body: { password: new FormData(form).get('password') },
+      body: { password },
     });
     state.csrfToken = session.csrfToken;
     form.reset();

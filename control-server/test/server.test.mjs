@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -11,6 +11,17 @@ async function read(response) {
   const payload = await response.json();
   return { response, payload };
 }
+
+test('login captures the password before disabling form controls', () => {
+  const script = readFileSync(path.resolve(import.meta.dirname, '../public/app.js'), 'utf8');
+  const loginHandler = script.slice(script.indexOf("$('#login-form').addEventListener"));
+  const capturePassword = loginHandler.indexOf("const password = new FormData(form).get('password')");
+  const disableForm = loginHandler.indexOf('setBusy(form, true)');
+
+  assert.ok(capturePassword >= 0, 'login handler must read the password');
+  assert.ok(disableForm >= 0, 'login handler must disable controls while submitting');
+  assert.ok(capturePassword < disableForm, 'password must be read before its input is disabled');
+});
 
 test('administrator passwords may contain a single character', async (t) => {
   const tempDir = mkdtempSync(path.join(os.tmpdir(), 'aiotv-control-test-'));
