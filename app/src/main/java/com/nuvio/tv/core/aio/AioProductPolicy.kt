@@ -5,8 +5,8 @@ package com.nuvio.tv.core.aio
  *
  * These are deliberately separate from Nuvio's normal user/profile capability
  * model. AIOtv treats the backend account configuration as authoritative for
- * identity and addons, while device-local playback preferences and catalog
- * presentation remain user controlled.
+ * identity, addons, metadata and catalog presentation as authoritative, while
+ * device-local playback preferences remain user controlled.
  */
 object AioProductPolicy {
     const val FIXED_APPEARANCE = true
@@ -23,8 +23,8 @@ object AioProductPolicy {
     const val USER_CAN_ENABLE_DISABLE_ADDONS = false
     const val USER_CAN_REORDER_ADDONS = false
 
-    const val USER_CAN_REORDER_CATALOGS = true
-    const val USER_CAN_ENABLE_DISABLE_CATALOGS = true
+    const val USER_CAN_REORDER_CATALOGS = false
+    const val USER_CAN_ENABLE_DISABLE_CATALOGS = false
 
     const val PRESERVE_PLAYBACK_SETTINGS = true
 }

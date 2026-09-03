@@ -168,7 +168,17 @@ class AioTvManagedAccountRepository @Inject constructor(
                 return@withContext BootstrapResult.Revoked
             }
 
-            reconcileManagedAddons(data.policy.addons)
+            val managedAddons = buildList {
+                data.policy.metadata?.let { metadata ->
+                    add(AioTvManagedAddon(name = metadata.name, manifestUrl = metadata.manifestUrl))
+                }
+                addAll(data.policy.addons.filterNot { addon ->
+                    data.policy.metadata?.let { metadata ->
+                        canonicalizeAddonUrl(addon.manifestUrl) == canonicalizeAddonUrl(metadata.manifestUrl)
+                    } ?: false
+                })
+            }
+            reconcileManagedAddons(managedAddons)
             reconcileManagedCollections(data.policy.collections.map { it.json })
             authStore.saveBootstrapMetadata(response.headers()["ETag"], data.policy.revision)
             BootstrapResult.Ready(data)

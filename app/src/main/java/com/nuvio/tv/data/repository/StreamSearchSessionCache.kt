@@ -29,6 +29,23 @@ internal data class StreamSearchRequestKey(
     val sourceConfiguration: String
 )
 
+internal data class StreamPrefetchCacheResult(
+    val requestId: String,
+    val cacheHit: Boolean,
+    val addonCount: Int,
+    val streamCount: Int,
+    val durationMs: Long,
+    val errorMessage: String?
+)
+
+internal data class StreamPrefetchConsumption(
+    val requestId: String,
+    val addonCount: Int,
+    val streamCount: Int,
+    val ageMs: Long,
+    val ready: Boolean
+)
+
 /**
  * Keeps a small set of source searches alive independently of UI collectors.
  * Completed results are memory-only and short-lived because addon URLs may expire.
@@ -40,6 +57,15 @@ internal class StreamSearchSessionCache(
     private val maxEntries: Int = DEFAULT_MAX_ENTRIES,
     private val prefetchCompletedTtlMs: Long = DEFAULT_PREFETCH_COMPLETED_TTL_MS,
     private val maxPrefetchEntries: Int = DEFAULT_MAX_PREFETCH_ENTRIES,
+    private val onPrefetchStarted: (
+        key: StreamSearchRequestKey,
+        requestId: String,
+        cacheHit: Boolean
+    ) -> Unit = { _, _, _ -> },
+    private val onPrefetchConsumed: (
+        key: StreamSearchRequestKey,
+        consumption: StreamPrefetchConsumption
+    ) -> Unit = { _, _ -> },
 ) {
     private data class Snapshot(
         val result: NetworkResult<List<AddonStreams>>,
@@ -50,6 +76,8 @@ internal class StreamSearchSessionCache(
     private class Session(
         val state: MutableStateFlow<Snapshot>,
         var prefetchedOnly: Boolean,
+        var prefetchRequestId: String?,
+        var prefetchStartedAtMs: Long?,
     ) {
         lateinit var job: Job
         @Volatile var invalidated: Boolean = false
@@ -60,17 +88,28 @@ internal class StreamSearchSessionCache(
     private val mutex = Mutex()
     private val sessions = LinkedHashMap<StreamSearchRequestKey, Session>(16, 0.75f, true)
 
+    private data class Acquisition(
+        val session: Session,
+        val created: Boolean,
+        val consumedPrefetch: StreamPrefetchConsumption? = null
+    )
+
     fun observe(
         key: StreamSearchRequestKey,
         forceRefresh: Boolean,
         producer: () -> Flow<NetworkResult<List<AddonStreams>>>
     ): Flow<NetworkResult<List<AddonStreams>>> = flow {
-        val session = acquireSession(
+        val acquisition = acquireSession(
             key = key,
             forceRefresh = forceRefresh,
             prefetchedOnly = false,
+            prefetchRequestId = null,
             producer = producer,
         )
+        val session = acquisition.session
+        acquisition.consumedPrefetch?.let { consumption ->
+            onPrefetchConsumed(key, consumption)
+        }
         var emittedVersion = -1L
         emitAll(
             session.state.transformWhile { snapshot ->
@@ -86,13 +125,35 @@ internal class StreamSearchSessionCache(
     /** Starts a repository-owned search so a later observer can attach to it. */
     suspend fun prefetch(
         key: StreamSearchRequestKey,
+        requestId: String,
         producer: () -> Flow<NetworkResult<List<AddonStreams>>>
-    ) {
-        acquireSession(
+    ): StreamPrefetchCacheResult {
+        val acquisition = acquireSession(
             key = key,
             forceRefresh = false,
             prefetchedOnly = true,
+            prefetchRequestId = requestId,
             producer = producer,
+        )
+        val session = acquisition.session
+        val effectiveRequestId = session.prefetchRequestId ?: requestId
+        onPrefetchStarted(key, effectiveRequestId, !acquisition.created)
+        session.job.join()
+        val groups = session.lastSuccessfulResult?.data.orEmpty()
+        val currentResult = session.state.value.result
+        val errorMessage = if (groups.isEmpty() && currentResult is NetworkResult.Error) {
+            currentResult.message
+        } else {
+            null
+        }
+        val startedAt = session.prefetchStartedAtMs ?: nowMs()
+        return StreamPrefetchCacheResult(
+            requestId = effectiveRequestId,
+            cacheHit = !acquisition.created,
+            addonCount = groups.size,
+            streamCount = groups.sumOf { it.streams.size },
+            durationMs = (nowMs() - startedAt).coerceAtLeast(0L),
+            errorMessage = errorMessage
         )
     }
 
@@ -100,9 +161,11 @@ internal class StreamSearchSessionCache(
         key: StreamSearchRequestKey,
         forceRefresh: Boolean,
         prefetchedOnly: Boolean,
+        prefetchRequestId: String?,
         producer: () -> Flow<NetworkResult<List<AddonStreams>>>
-    ): Session {
+    ): Acquisition {
         var created: Session? = null
+        var consumedPrefetch: StreamPrefetchConsumption? = null
         val selected = mutex.withLock {
             removeExpiredLocked()
             removeObsoleteSessionsLocked(key)
@@ -111,12 +174,29 @@ internal class StreamSearchSessionCache(
                 sessions.remove(key)?.cancelAndComplete()
             } else {
                 sessions[key]?.let { session ->
-                    if (!prefetchedOnly) session.prefetchedOnly = false
+                    if (prefetchedOnly && session.prefetchRequestId == null) {
+                        session.prefetchRequestId = prefetchRequestId
+                        session.prefetchStartedAtMs = nowMs()
+                    }
+                    if (!prefetchedOnly && session.prefetchedOnly) {
+                        val groups = session.lastSuccessfulResult?.data.orEmpty()
+                        consumedPrefetch = session.prefetchRequestId?.let { existingRequestId ->
+                            StreamPrefetchConsumption(
+                                requestId = existingRequestId,
+                                addonCount = groups.size,
+                                streamCount = groups.sumOf { it.streams.size },
+                                ageMs = (nowMs() - (session.prefetchStartedAtMs ?: nowMs()))
+                                    .coerceAtLeast(0L),
+                                ready = session.completedAtMs != null && groups.isNotEmpty()
+                            )
+                        }
+                        session.prefetchedOnly = false
+                    }
                     return@withLock session
                 }
             }
 
-            createSession(key, prefetchedOnly, producer).also { session ->
+            createSession(key, prefetchedOnly, prefetchRequestId, producer).also { session ->
                 sessions[key] = session
                 trimPrefetchEntriesLocked()
                 trimToSizeLocked()
@@ -126,12 +206,17 @@ internal class StreamSearchSessionCache(
         withContext(NonCancellable) {
             created?.job?.start()
         }
-        return selected
+        return Acquisition(
+            session = selected,
+            created = created != null,
+            consumedPrefetch = consumedPrefetch
+        )
     }
 
     private fun createSession(
         key: StreamSearchRequestKey,
         prefetchedOnly: Boolean,
+        prefetchRequestId: String?,
         producer: () -> Flow<NetworkResult<List<AddonStreams>>>
     ): Session {
         val session = Session(
@@ -143,6 +228,8 @@ internal class StreamSearchSessionCache(
                 )
             ),
             prefetchedOnly = prefetchedOnly,
+            prefetchRequestId = prefetchRequestId,
+            prefetchStartedAtMs = if (prefetchedOnly) nowMs() else null,
         )
         session.job = scope.launch(start = CoroutineStart.LAZY) {
             try {

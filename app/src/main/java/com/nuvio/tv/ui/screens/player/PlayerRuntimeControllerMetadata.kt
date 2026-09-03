@@ -427,11 +427,17 @@ private fun PlayerRuntimeController.maybePrefetchNextEpisodeStreams(
     nextEpisodeStreamPrefetchKey = prefetchKey
     scope.launch {
         runCatching {
-            streamRepository.prefetchStreams(
+            val result = streamRepository.prefetchStreams(
                 type = type,
                 videoId = nextVideo.id,
                 season = nextVideo.season,
                 episode = nextVideo.episode,
+            )
+            android.util.Log.i(
+                PlayerRuntimeController.TAG,
+                "Next-episode prefetch ${result.status} for $prefetchKey: " +
+                    "${result.streamCount} streams from ${result.addonCount} addons in " +
+                    "${result.durationMs}ms (cacheHit=${result.cacheHit}, request=${result.requestId})",
             )
         }.onFailure { error ->
             if (error is kotlinx.coroutines.CancellationException) throw error

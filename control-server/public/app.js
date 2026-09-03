@@ -4,7 +4,13 @@ const MAX_COLLECTION_BYTES = 10_000_000;
 
 const state = {
   csrfToken: '',
-  dashboard: { users: [], groups: [], pendingPairingCount: 0, recentActivity: [] },
+  dashboard: {
+    users: [],
+    groups: [],
+    pendingPairingCount: 0,
+    recentActivity: [],
+    prefetch: { summary: {}, recent: [] },
+  },
   currentUser: null,
   currentGroup: null,
   pendingPairing: null,
@@ -85,6 +91,12 @@ function formatRelativeTime(value) {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
+function formatDuration(milliseconds) {
+  if (milliseconds == null) return '—';
+  if (milliseconds < 1000) return `${milliseconds} ms`;
+  return `${(milliseconds / 1000).toFixed(milliseconds < 10_000 ? 1 : 0)} s`;
+}
+
 function truncateMiddle(value, maximum = 72) {
   if (value.length <= maximum) return value;
   const side = Math.floor((maximum - 1) / 2);
@@ -143,7 +155,7 @@ function renderUsers(users) {
     const meta = document.createElement('div');
     meta.className = 'card-meta';
     const resources = document.createElement('span');
-    resources.textContent = `${Number(user.addonCount) + Number(user.collectionCount)} resources`;
+    resources.textContent = `${Number(user.addonCount) + Number(user.collectionCount) + (user.hasMetadata ? 1 : 0)} resources`;
     const devices = document.createElement('span');
     devices.textContent = `${user.deviceCount} TV${Number(user.deviceCount) === 1 ? '' : 's'}`;
     meta.append(resources, devices);
@@ -175,7 +187,7 @@ function renderGroups(groups) {
     heading.textContent = group.name;
     const summary = document.createElement('p');
     summary.className = 'muted';
-    summary.textContent = `${group.addonCount} addon${Number(group.addonCount) === 1 ? '' : 's'} · ${group.collectionCount} collection file${Number(group.collectionCount) === 1 ? '' : 's'}`;
+    summary.textContent = `${group.hasMetadata ? 'AIOmetadata · ' : ''}${group.addonCount} addon${Number(group.addonCount) === 1 ? '' : 's'} · ${group.collectionCount} collection file${Number(group.collectionCount) === 1 ? '' : 's'}`;
     const meta = document.createElement('div');
     meta.className = 'card-meta';
     meta.textContent = `Updated ${formatRelativeTime(group.updatedAt)}`;
@@ -188,7 +200,7 @@ function renderDashboard() {
   const { users, groups, pendingPairingCount, recentActivity } = state.dashboard;
   const deviceCount = users.reduce((sum, user) => sum + Number(user.deviceCount), 0);
   const resourceCount = groups.reduce(
-    (sum, group) => sum + Number(group.addonCount) + Number(group.collectionCount),
+    (sum, group) => sum + Number(group.addonCount) + Number(group.collectionCount) + (group.hasMetadata ? 1 : 0),
     0,
   );
   $('#user-count').textContent = users.length;
@@ -198,6 +210,7 @@ function renderDashboard() {
   $('#pending-count').textContent = pendingPairingCount;
   renderUsers(users);
   renderGroups(groups);
+  renderPrefetch(state.dashboard.prefetch);
 
   const activityList = $('#activity-list');
   activityList.replaceChildren();
@@ -212,6 +225,73 @@ function renderDashboard() {
     time.textContent = formatRelativeTime(event.createdAt);
     item.append(summary, time);
     activityList.append(item);
+  }
+}
+
+function renderPrefetch(prefetch = {}) {
+  const summary = prefetch.summary ?? {};
+  $('#prefetch-started').textContent = Number(summary.started ?? 0);
+  $('#prefetch-completed').textContent = Number(summary.completed ?? 0);
+  $('#prefetch-consumed').textContent = Number(summary.consumed ?? 0);
+  $('#prefetch-empty').textContent = Number(summary.empty ?? 0);
+  $('#prefetch-failed').textContent = Number(summary.failed ?? 0);
+
+  const status = $('#prefetch-monitor-status');
+  status.textContent = summary.lastEventAt
+    ? `Last event ${formatRelativeTime(summary.lastEventAt)} · average ready time ${formatDuration(summary.averageDurationMs)} · 24-hour window`
+    : 'No prefetch events received yet. Start an episode and continue beyond the prefetch threshold.';
+
+  const list = $('#prefetch-events');
+  list.replaceChildren();
+  for (const event of prefetch.recent ?? []) {
+    const row = document.createElement('article');
+    row.className = 'prefetch-event';
+    const heading = document.createElement('div');
+    heading.className = 'prefetch-event-heading';
+    const stage = document.createElement('span');
+    stage.className = `prefetch-stage prefetch-stage-${event.stage}`;
+    stage.textContent = {
+      started: 'Started',
+      completed: 'Ready',
+      consumed: 'Consumed',
+      empty: 'No streams',
+      failed: 'Failed',
+    }[event.stage] ?? event.stage;
+    const media = document.createElement('strong');
+    const episode = event.season == null || event.episode == null
+      ? ''
+      : ` · S${String(event.season).padStart(2, '0')}E${String(event.episode).padStart(2, '0')}`;
+    media.textContent = `${event.contentType} · ${event.videoId}${episode}`;
+    const time = document.createElement('time');
+    time.dateTime = event.createdAt;
+    time.textContent = formatRelativeTime(event.createdAt);
+    heading.append(stage, media, time);
+
+    const details = document.createElement('p');
+    const measurements = [];
+    if (event.streamCount != null) measurements.push(`${event.streamCount} streams`);
+    if (event.addonCount != null) measurements.push(`${event.addonCount} addons`);
+    if (event.durationMs != null) measurements.push(formatDuration(event.durationMs));
+    if (event.cacheHit === true) measurements.push('existing search reused');
+    measurements.push(`${event.userName} · ${event.deviceName}`);
+    details.textContent = measurements.join(' · ');
+    if (event.detail) {
+      const detail = document.createElement('small');
+      detail.textContent = event.detail;
+      row.append(heading, details, detail);
+    } else {
+      row.append(heading, details);
+    }
+    list.append(row);
+  }
+}
+
+async function loadPrefetch(silent = false) {
+  try {
+    state.dashboard.prefetch = await api('/api/admin/prefetch?limit=100');
+    renderPrefetch(state.dashboard.prefetch);
+  } catch (error) {
+    if (!silent && error.status !== 401) toast(error.message);
   }
 }
 
@@ -289,7 +369,20 @@ function renderGroup(group) {
   state.currentGroup = group;
   $('#group-name').textContent = group.name;
   $('#group-user-count').textContent = `${group.userCount} user${Number(group.userCount) === 1 ? '' : 's'}`;
-  $('#group-resource-count').textContent = `${group.resources.length} managed resource${group.resources.length === 1 ? '' : 's'}`;
+  const managedResourceCount = group.resources.length + (group.metadata ? 1 : 0);
+  $('#group-resource-count').textContent = `${managedResourceCount} managed resource${managedResourceCount === 1 ? '' : 's'}`;
+
+  const metadataStatus = Object.assign(
+    makeStatus(Boolean(group.metadata), 'Active', 'Not configured'),
+    { id: 'metadata-status' },
+  );
+  $('#metadata-status').replaceWith(metadataStatus);
+  $('#metadata-url').value = group.metadata?.manifestUrl ?? '';
+  $('#metadata-detail').textContent = group.metadata
+    ? `${group.metadata.name} · requests are authenticated and proxied by AIOtv Control`
+    : 'Save the configured manifest URL produced by your self-hosted AIOmetadata instance.';
+  $('#remove-metadata-button').hidden = !group.metadata;
+  setError($('#metadata-error'));
 
   const list = $('#group-resources');
   list.replaceChildren();
@@ -387,6 +480,7 @@ function showPage(targetId) {
   $$('[data-page-target]').forEach((button) => {
     button.classList.toggle('is-active', button.dataset.pageTarget === targetId);
   });
+  if (targetId === 'prefetch-page') loadPrefetch(true);
 }
 
 $('#pair-code').addEventListener('input', (event) => { event.target.value = formatCode(event.target.value); });
@@ -587,6 +681,42 @@ $('#add-addon-form').addEventListener('submit', async (event) => {
   }
 });
 
+$('#metadata-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  setError($('#metadata-error'));
+  setBusy(form, true);
+  try {
+    const manifestUrl = new FormData(form).get('manifestUrl');
+    await api(`/api/admin/groups/${state.currentGroup.id}/metadata`, {
+      method: 'PUT',
+      body: { manifestUrl },
+    });
+    toast('AIOmetadata is now built into this group.');
+    await loadDashboard();
+    renderGroup(await api(`/api/admin/groups/${state.currentGroup.id}`));
+  } catch (error) {
+    setError($('#metadata-error'), error.message);
+  } finally {
+    setBusy(form, false);
+  }
+});
+
+$('#remove-metadata-button').addEventListener('click', async (event) => {
+  if (!window.confirm('Remove the built-in AIOmetadata provider from every user assigned to this group?')) return;
+  event.currentTarget.disabled = true;
+  try {
+    await api(`/api/admin/groups/${state.currentGroup.id}/metadata`, { method: 'DELETE' });
+    toast('AIOmetadata removed from the group.');
+    await loadDashboard();
+    renderGroup(await api(`/api/admin/groups/${state.currentGroup.id}`));
+  } catch (error) {
+    setError($('#metadata-error'), error.message);
+  } finally {
+    event.currentTarget.disabled = false;
+  }
+});
+
 $('#add-collection-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
@@ -725,6 +855,14 @@ $('#delete-group-button').addEventListener('click', async () => {
     toast(error.message);
   }
 });
+
+$('#refresh-prefetch-button').addEventListener('click', () => loadPrefetch());
+
+window.setInterval(() => {
+  if (state.csrfToken && !$('#prefetch-page').hidden && document.visibilityState === 'visible') {
+    loadPrefetch(true);
+  }
+}, 5_000);
 
 async function initialise() {
   try {

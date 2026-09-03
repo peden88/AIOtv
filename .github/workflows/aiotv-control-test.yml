@@ -7,7 +7,9 @@ on:
       - "control-server/**"
       - ".github/workflows/aiotv-control-test.yml"
   push:
-    branches: [feature/aiotv-control-mvp]
+    branches:
+      - feature/aiotv-control-mvp
+      - feature/next-episode-prefetch
     paths:
       - "control-server/**"
       - ".github/workflows/aiotv-control-test.yml"

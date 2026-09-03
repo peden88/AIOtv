@@ -3,9 +3,10 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import http from 'node:http';
 import test from 'node:test';
 import { createControlServer } from '../src/server.mjs';
-import { createPasswordHash } from '../src/security.mjs';
+import { createPasswordHash, sha256 } from '../src/security.mjs';
 
 async function read(response) {
   const payload = await response.json();
@@ -445,4 +446,159 @@ test('legacy per-user addons migrate into reusable groups without data loss', as
   assert.equal(user.group.resources.length, 1);
   assert.equal(user.group.resources[0].manifestUrl, 'https://example.com/manifest.json');
   assert.equal(app.database.listGroups().length, 1);
+});
+
+test('AIOmetadata is managed, authenticated, proxied, and prefetch telemetry is visible', async (t) => {
+  const tempDir = mkdtempSync(path.join(os.tmpdir(), 'aiotv-control-metadata-'));
+  const upstream = http.createServer((request, response) => {
+    const payload = request.url.startsWith('/stremio/test/config/manifest.json')
+      ? {
+          id: 'community.aiometadata',
+          name: 'AIOmetadata test',
+          version: '1.0.0',
+          resources: ['catalog', 'meta'],
+          types: ['movie', 'series'],
+          catalogs: [{ type: 'movie', id: 'popular', name: 'Popular' }],
+        }
+      : request.url.startsWith('/stremio/test/config/catalog/movie/popular.json')
+        ? { metas: [{ id: 'tt1234567', type: 'movie', name: 'Proxy test' }] }
+        : null;
+    if (!payload) {
+      response.writeHead(404, { 'content-type': 'application/json' });
+      return response.end(JSON.stringify({ error: 'not found' }));
+    }
+    response.writeHead(200, {
+      'content-type': 'application/json',
+      'cache-control': 'public, max-age=60',
+    });
+    response.end(JSON.stringify(payload));
+  });
+  await new Promise((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+  const upstreamPort = upstream.address().port;
+
+  const app = createControlServer({
+    host: '127.0.0.1',
+    port: 0,
+    publicUrl: 'http://127.0.0.1',
+    databasePath: path.join(tempDir, 'test.sqlite'),
+    adminPassword: 'test-password',
+    sessionSecret: 'metadata-test-session-secret-more-than-32-characters',
+    cookieSecure: false,
+    allowHttpAddons: true,
+    metadataAllowedHosts: new Set(['127.0.0.1']),
+  });
+  t.after(async () => {
+    await app.close();
+    await new Promise((resolve) => upstream.close(resolve));
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+  const address = await app.listen();
+  const base = `http://127.0.0.1:${address.port}`;
+
+  const login = await read(await fetch(`${base}/api/admin/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ password: 'test-password' }),
+  }));
+  const cookie = login.response.headers.get('set-cookie').split(';', 1)[0];
+  const csrf = login.payload.data.csrfToken;
+  const adminRequest = (pathname, options = {}) => fetch(`${base}${pathname}`, {
+    ...options,
+    headers: {
+      cookie,
+      'x-aiotv-csrf': csrf,
+      ...(options.body ? { 'content-type': 'application/json' } : {}),
+      ...options.headers,
+    },
+  });
+
+  const group = await read(await adminRequest('/api/admin/groups', {
+    method: 'POST',
+    body: JSON.stringify({ name: 'AIOmetadata group' }),
+  }));
+  const groupId = group.payload.data.id;
+  const user = await read(await adminRequest('/api/admin/users', {
+    method: 'POST',
+    body: JSON.stringify({ name: 'Metadata user', groupId }),
+  }));
+  const userId = user.payload.data.id;
+  const metadata = await read(await adminRequest(`/api/admin/groups/${groupId}/metadata`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      manifestUrl: `http://127.0.0.1:${upstreamPort}/stremio/test/config/manifest.json`,
+    }),
+  }));
+  assert.equal(metadata.response.status, 200);
+  assert.equal(metadata.payload.data.name, 'AIOmetadata test');
+
+  const start = await read(await fetch(`${base}/api/v1/pairings`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ deviceName: 'Prefetch TV' }),
+  }));
+  const pairing = app.database.getPairingByTokenHash(
+    sha256(start.payload.data.deviceCode),
+  );
+  app.database.approvePairing(pairing.id, userId, 'Prefetch TV');
+  const token = start.payload.data.deviceCode;
+
+  const bootstrap = await read(await fetch(`${base}/api/v1/device/bootstrap`, {
+    headers: { authorization: `Bearer ${token}` },
+  }));
+  assert.equal(bootstrap.payload.data.policy.metadata.provider, 'aiometadata');
+  assert.equal(
+    bootstrap.payload.data.policy.metadata.manifestUrl,
+    'http://127.0.0.1/api/v1/metadata/manifest.json',
+  );
+  assert.equal('manifestUrl' in bootstrap.payload.data.policy.metadata, true);
+  assert.equal(JSON.stringify(bootstrap.payload.data).includes(String(upstreamPort)), false);
+
+  const anonymousProxy = await fetch(`${base}/api/v1/metadata/manifest.json`);
+  assert.equal(anonymousProxy.status, 401);
+  const manifest = await fetch(`${base}/api/v1/metadata/manifest.json`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  assert.equal(manifest.status, 200);
+  assert.equal(manifest.headers.get('x-aiotv-metadata-proxy'), 'aiometadata');
+  assert.equal((await manifest.json()).name, 'AIOmetadata test');
+  const catalog = await fetch(`${base}/api/v1/metadata/catalog/movie/popular.json`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  assert.equal(catalog.status, 200);
+  assert.equal((await catalog.json()).metas[0].name, 'Proxy test');
+
+  for (const event of [
+    { stage: 'started', cacheHit: false },
+    { stage: 'completed', addonCount: 2, streamCount: 18, durationMs: 840, cacheHit: false },
+    { stage: 'consumed', addonCount: 2, streamCount: 18, durationMs: 4_200, cacheHit: true },
+  ]) {
+    const recorded = await fetch(`${base}/api/v1/device/prefetch-events`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        requestId: 'prefetch-test-1',
+        contentType: 'series',
+        videoId: 'tt1234567:1:2',
+        season: 1,
+        episode: 2,
+        ...event,
+      }),
+    });
+    assert.equal(recorded.status, 202);
+  }
+
+  const prefetch = await read(await adminRequest('/api/admin/prefetch'));
+  assert.equal(prefetch.payload.data.summary.started, 1);
+  assert.equal(prefetch.payload.data.summary.completed, 1);
+  assert.equal(prefetch.payload.data.summary.consumed, 1);
+  assert.equal(prefetch.payload.data.recent[0].stage, 'consumed');
+  assert.equal(prefetch.payload.data.recent[0].deviceName, 'Prefetch TV');
+
+  const removed = await read(await adminRequest(`/api/admin/groups/${groupId}/metadata`, {
+    method: 'DELETE',
+  }));
+  assert.equal(removed.payload.data.removed, true);
 });

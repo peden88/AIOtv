@@ -321,6 +321,8 @@ input::placeholder { color: #67646f; }
 .addon-form .button { min-height: 3rem; }
 .collection-form { display: grid; grid-template-columns: 1.4fr .75fr auto; gap: .7rem; align-items: end; }
 .collection-form .button { min-height: 3rem; }
+.metadata-form { display: grid; grid-template-columns: minmax(14rem, 1fr) auto auto; gap: .7rem; align-items: end; }
+.metadata-form .button { min-height: 3rem; }
 .inline-form { display: grid; grid-template-columns: minmax(12rem, 1fr) auto; gap: .7rem; }
 .resource-heading { display: flex; min-width: 0; align-items: center; gap: .55rem; }
 .resource-heading strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -328,6 +330,26 @@ input::placeholder { color: #67646f; }
 .resource-badge-collection { color: #9fe7c2 !important; background: #153326; border-color: #276444; }
 .resource-actions { display: flex; flex: 0 0 auto; gap: .35rem; }
 .resource-actions .button { min-width: 2.25rem; }
+
+.prefetch-summary-grid { display: grid; grid-template-columns: repeat(5, 1fr); margin-bottom: 1rem; background: var(--panel); border: 1px solid var(--border); border-radius: 1rem; }
+.prefetch-summary-grid article { padding: 1rem; border-right: 1px solid var(--border); }
+.prefetch-summary-grid article:last-child { border-right: 0; }
+.prefetch-summary-grid span, .prefetch-summary-grid strong { display: block; }
+.prefetch-summary-grid span { color: var(--muted); font-size: .75rem; }
+.prefetch-summary-grid strong { margin-top: .15rem; font-size: 1.4rem; }
+.prefetch-monitor-status { margin: 0 0 1rem; font-size: .82rem; }
+.prefetch-events { display: grid; gap: .65rem; }
+.prefetch-event { padding: .85rem 1rem; background: var(--panel-raised); border: 1px solid var(--border); border-radius: .8rem; }
+.prefetch-event-heading { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: .65rem; align-items: center; }
+.prefetch-event-heading strong { overflow: hidden; font-size: .86rem; text-overflow: ellipsis; white-space: nowrap; }
+.prefetch-event time { color: var(--faint); font-size: .74rem; }
+.prefetch-event p { margin: .45rem 0 0; color: var(--muted); font-size: .78rem; }
+.prefetch-event small { display: block; margin-top: .25rem; color: #ffbec5; }
+.prefetch-stage { padding: .2rem .45rem; color: #b9f1d2; background: #11271b; border: 1px solid #224d34; border-radius: 999px; font-size: .65rem; font-weight: 800; text-transform: uppercase; }
+.prefetch-stage-started { color: #c8c0ff; background: #252040; border-color: #504781; }
+.prefetch-stage-consumed { color: #9fd9ff; background: #122a3b; border-color: #285979; }
+.prefetch-stage-empty { color: #ffd99e; background: #32240f; border-color: #64491f; }
+.prefetch-stage-failed { color: #ffbec5; background: #30161a; border-color: #58272e; }
 
 .toast-region { position: fixed; z-index: 20; right: 1.25rem; bottom: 1.25rem; display: grid; gap: .6rem; }
 .toast { width: min(24rem, calc(100vw - 2.5rem)); padding: .9rem 1rem; background: #202027; border: 1px solid #46434f; border-radius: .8rem; box-shadow: var(--shadow); animation: toast-in 180ms ease-out; }
@@ -342,8 +364,10 @@ input::placeholder { color: #67646f; }
   .metric:last-child { grid-column: 1 / -1; }
   .content-grid { grid-template-columns: 1fr; }
   .activity-panel { order: 2; }
-  .addon-form, .collection-form { grid-template-columns: 1fr 1fr; }
-  .addon-form .button, .collection-form .button { grid-column: 1 / -1; }
+  .addon-form, .collection-form, .metadata-form { grid-template-columns: 1fr 1fr; }
+  .addon-form .button, .collection-form .button, .metadata-form > div { grid-column: 1 / -1; }
+  .prefetch-summary-grid { grid-template-columns: repeat(3, 1fr); }
+  .prefetch-summary-grid article { border-bottom: 1px solid var(--border); }
 }
 
 @media (max-width: 620px) {
@@ -356,8 +380,12 @@ input::placeholder { color: #67646f; }
   .metric { padding: .9rem; }
   .metric strong { font-size: 1.35rem; }
   .section-heading { align-items: center; }
-  .form-grid, .addon-form, .collection-form, .inline-form { grid-template-columns: 1fr; }
+  .form-grid, .addon-form, .collection-form, .metadata-form, .inline-form { grid-template-columns: 1fr; }
   .addon-form .button, .collection-form .button { grid-column: auto; }
+  .metadata-form > div { grid-column: auto; }
+  .prefetch-summary-grid { grid-template-columns: 1fr 1fr; }
+  .prefetch-event-heading { grid-template-columns: auto 1fr; }
+  .prefetch-event time { grid-column: 2; }
   .profile-toolbar { flex-wrap: wrap; }
   .profile-toolbar .muted { width: 100%; order: 3; }
   .managed-row { grid-template-columns: 1fr; }

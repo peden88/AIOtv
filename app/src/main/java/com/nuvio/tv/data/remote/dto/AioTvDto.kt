@@ -63,7 +63,15 @@ data class AioTvBootstrapPolicy(
     val revision: Int,
     val updatedAt: String,
     val addons: List<AioTvManagedAddon> = emptyList(),
-    val collections: List<AioTvManagedCollection> = emptyList()
+    val collections: List<AioTvManagedCollection> = emptyList(),
+    val metadata: AioTvManagedMetadata? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class AioTvManagedMetadata(
+    val provider: String = "aiometadata",
+    val name: String = "AIOmetadata",
+    val manifestUrl: String
 )
 
 @JsonClass(generateAdapter = true)
@@ -82,5 +90,21 @@ data class AioTvManagedCollection(
 @JsonClass(generateAdapter = true)
 data class AioTvManagementPolicy(
     val addonMembership: String,
-    val catalogOrder: String
+    val catalogOrder: String,
+    val metadataProvider: String = "administrator"
+)
+
+@JsonClass(generateAdapter = true)
+data class AioTvPrefetchEventRequest(
+    val requestId: String,
+    val stage: String,
+    val contentType: String,
+    val videoId: String,
+    val season: Int? = null,
+    val episode: Int? = null,
+    val addonCount: Int? = null,
+    val streamCount: Int? = null,
+    val durationMs: Long? = null,
+    val cacheHit: Boolean? = null,
+    val detail: String? = null
 )

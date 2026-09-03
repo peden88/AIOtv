@@ -82,6 +82,7 @@
         <nav class="page-tabs" aria-label="Control sections">
           <button class="page-tab is-active" type="button" data-page-target="users-page">Users</button>
           <button class="page-tab" type="button" data-page-target="groups-page">Addon groups</button>
+          <button class="page-tab" type="button" data-page-target="prefetch-page">Prefetch monitor</button>
         </nav>
 
         <div class="content-grid">
@@ -119,6 +120,26 @@
               <p>Groups are reusable server-managed addon and collection policies.</p>
               <button class="button button-primary" type="button" data-action="new-group">Create group</button>
             </div>
+          </section>
+
+          <section id="prefetch-page" class="dashboard-page" aria-labelledby="prefetch-heading" hidden>
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Live diagnostics</p>
+                <h2 id="prefetch-heading">Next-episode prefetch</h2>
+                <p>Events update every five seconds while this page is open. “Consumed” confirms that playback reused a prefetched search.</p>
+              </div>
+              <button id="refresh-prefetch-button" class="button button-quiet" type="button">Refresh</button>
+            </div>
+            <div class="prefetch-summary-grid" aria-label="Prefetch totals from the last 24 hours">
+              <article><span>Started</span><strong id="prefetch-started">0</strong></article>
+              <article><span>Ready</span><strong id="prefetch-completed">0</strong></article>
+              <article><span>Consumed</span><strong id="prefetch-consumed">0</strong></article>
+              <article><span>Empty</span><strong id="prefetch-empty">0</strong></article>
+              <article><span>Failed</span><strong id="prefetch-failed">0</strong></article>
+            </div>
+            <p id="prefetch-monitor-status" class="muted prefetch-monitor-status">No prefetch events received yet.</p>
+            <div id="prefetch-events" class="prefetch-events"></div>
           </section>
           </div>
 
@@ -265,6 +286,26 @@
           <span id="group-resource-count" class="muted"></span>
           <button id="delete-group-button" class="button button-danger button-small" type="button">Delete group</button>
         </div>
+
+        <section class="profile-section" aria-labelledby="group-metadata-heading">
+          <div class="section-heading section-heading-compact">
+            <div>
+              <h3 id="group-metadata-heading">Built-in AIOmetadata</h3>
+              <p>This provider is installed first and proxied through AIOtv Control. Users never see its manifest address or configuration.</p>
+            </div>
+            <span id="metadata-status" class="status-pill status-disabled">Not configured</span>
+          </div>
+          <form id="metadata-form" class="metadata-form">
+            <div>
+              <label for="metadata-url">Configured AIOmetadata manifest URL</label>
+              <input id="metadata-url" name="manifestUrl" type="url" placeholder="https://metadata.example/stremio/.../manifest.json" required>
+            </div>
+            <button class="button button-primary" type="submit">Save AIOmetadata</button>
+            <button id="remove-metadata-button" class="button button-danger" type="button" hidden>Remove</button>
+          </form>
+          <p id="metadata-detail" class="field-help"></p>
+          <p id="metadata-error" class="form-error" role="alert"></p>
+        </section>
 
         <section class="profile-section" aria-labelledby="group-resources-heading">
           <div class="section-heading section-heading-compact">

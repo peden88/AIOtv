@@ -16,7 +16,13 @@ class StreamSearchSessionCacheTest {
     @Test
     fun `prefetched search is reused by the next observer`() = runTest {
         var producerCalls = 0
-        val cache = StreamSearchSessionCache(scope = this)
+        val starts = mutableListOf<String>()
+        val consumptions = mutableListOf<StreamPrefetchConsumption>()
+        val cache = StreamSearchSessionCache(
+            scope = this,
+            onPrefetchStarted = { _, requestId, _ -> starts += requestId },
+            onPrefetchConsumed = { _, consumption -> consumptions += consumption }
+        )
         val key = key(episode = 2)
         val producer: () -> Flow<NetworkResult<List<AddonStreams>>> = {
             flow {
@@ -25,13 +31,18 @@ class StreamSearchSessionCacheTest {
             }
         }
 
-        cache.prefetch(key, producer)
+        val prefetched = cache.prefetch(key, "prefetch-1", producer)
         advanceUntilIdle()
 
         val observed = cache.observe(key, forceRefresh = false, producer = producer).toList()
 
         assertEquals(1, producerCalls)
         assertTrue(observed.last() is NetworkResult.Success)
+        assertEquals(listOf("prefetch-1"), starts)
+        assertEquals("prefetch-1", prefetched.requestId)
+        assertEquals(1, prefetched.addonCount)
+        assertEquals(1, consumptions.size)
+        assertTrue(consumptions.single().ready)
     }
 
     @Test
@@ -47,7 +58,7 @@ class StreamSearchSessionCacheTest {
             }
         }
 
-        cache.prefetch(key, producer)
+        cache.prefetch(key, "prefetch-2", producer)
         advanceUntilIdle()
         nowMs = 10 * 60 * 1_000L
         cache.observe(key, forceRefresh = false, producer = producer).toList()
@@ -61,7 +72,7 @@ class StreamSearchSessionCacheTest {
         val cache = StreamSearchSessionCache(scope = this)
         val key = key(episode = 2)
 
-        cache.prefetch(key) {
+        cache.prefetch(key, "prefetch-3") {
             flow {
                 producerCalls += 1
                 emit(NetworkResult.Error("prefetch failed"))
@@ -86,7 +97,7 @@ class StreamSearchSessionCacheTest {
         val cache = StreamSearchSessionCache(scope = this)
 
         suspend fun prefetch(episode: Int) {
-            cache.prefetch(key(episode)) {
+            cache.prefetch(key(episode), "prefetch-$episode") {
                 flow {
                     producerCalls[episode] = producerCalls.getOrDefault(episode, 0) + 1
                     emit(NetworkResult.Success(resultFor("episode-$episode")))

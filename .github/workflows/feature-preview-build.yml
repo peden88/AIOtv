@@ -71,6 +71,7 @@ jobs:
           ./gradlew \
             :app:testFullPreviewUnitTest \
             --tests 'com.nuvio.tv.updater.*' \
+            --tests 'com.nuvio.tv.core.aio.AioTvManagedRequestPolicyTest' \
             --tests 'com.nuvio.tv.data.repository.StreamSearchSessionCacheTest' \
             --tests 'com.nuvio.tv.ui.screens.player.NextEpisodeStreamPrefetchPolicyTest' \
             :app:assembleFullPreview \

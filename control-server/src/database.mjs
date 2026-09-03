@@ -69,6 +69,16 @@ export function openDatabase(databasePath) {
     CREATE INDEX IF NOT EXISTS managed_resources_group_idx
       ON managed_resources(group_id, position);
 
+    CREATE TABLE IF NOT EXISTS managed_metadata_profiles (
+      group_id TEXT PRIMARY KEY REFERENCES managed_groups(id) ON DELETE CASCADE,
+      provider TEXT NOT NULL DEFAULT 'aiometadata' CHECK (provider = 'aiometadata'),
+      name TEXT NOT NULL,
+      manifest_url TEXT NOT NULL,
+      canonical_url TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS devices (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES managed_users(id),
@@ -108,6 +118,29 @@ export function openDatabase(databasePath) {
       target_id TEXT,
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS prefetch_events (
+      id TEXT PRIMARY KEY,
+      request_id TEXT NOT NULL,
+      device_id TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES managed_users(id) ON DELETE CASCADE,
+      stage TEXT NOT NULL CHECK (stage IN ('started', 'completed', 'empty', 'failed', 'consumed')),
+      content_type TEXT NOT NULL,
+      video_id TEXT NOT NULL,
+      season INTEGER,
+      episode INTEGER,
+      addon_count INTEGER,
+      stream_count INTEGER,
+      duration_ms INTEGER,
+      cache_hit INTEGER CHECK (cache_hit IS NULL OR cache_hit IN (0, 1)),
+      detail TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS prefetch_events_created_idx
+      ON prefetch_events(created_at DESC);
+    CREATE INDEX IF NOT EXISTS prefetch_events_request_idx
+      ON prefetch_events(device_id, request_id, created_at);
   `);
 
   const userColumns = db.prepare('PRAGMA table_info(managed_users)').all();
@@ -189,7 +222,12 @@ export function openDatabase(databasePath) {
         ...(!includeContent ? { collectionJson: undefined } : {}),
       };
     });
-    return { ...group, resources };
+    const metadata = db.prepare(`
+      SELECT provider, name, manifest_url AS manifestUrl,
+             created_at AS createdAt, updated_at AS updatedAt
+      FROM managed_metadata_profiles WHERE group_id = ?
+    `).get(id);
+    return { ...group, resources, metadata: metadata ? { ...metadata } : null };
   };
 
   const getUser = (id) => {
@@ -233,16 +271,22 @@ export function openDatabase(databasePath) {
         SELECT u.id, u.name, u.enabled, u.policy_revision AS policyRevision,
                u.group_id AS groupId, g.name AS groupName,
                u.updated_at AS updatedAt,
+               MAX(CASE WHEN m.group_id IS NULL THEN 0 ELSE 1 END) AS hasMetadata,
                COUNT(DISTINCT CASE WHEN r.resource_type = 'addon' THEN r.id END) AS addonCount,
                COUNT(DISTINCT CASE WHEN r.resource_type = 'collection' THEN r.id END) AS collectionCount,
                COUNT(DISTINCT CASE WHEN d.revoked_at IS NULL THEN d.id END) AS deviceCount
         FROM managed_users u
         LEFT JOIN managed_groups g ON g.id = u.group_id
+        LEFT JOIN managed_metadata_profiles m ON m.group_id = u.group_id
         LEFT JOIN managed_resources r ON r.group_id = u.group_id
         LEFT JOIN devices d ON d.user_id = u.id
         GROUP BY u.id
         ORDER BY u.name COLLATE NOCASE
-      `).all()).map((user) => ({ ...user, enabled: Boolean(user.enabled) }));
+      `).all()).map((user) => ({
+        ...user,
+        enabled: Boolean(user.enabled),
+        hasMetadata: Boolean(user.hasMetadata),
+      }));
     },
 
     getUser,
@@ -293,14 +337,16 @@ export function openDatabase(databasePath) {
       return rowsToPlain(db.prepare(`
         SELECT g.id, g.name, g.created_at AS createdAt, g.updated_at AS updatedAt,
                COUNT(DISTINCT u.id) AS userCount,
+               MAX(CASE WHEN m.group_id IS NULL THEN 0 ELSE 1 END) AS hasMetadata,
                COUNT(DISTINCT CASE WHEN r.resource_type = 'addon' THEN r.id END) AS addonCount,
                COUNT(DISTINCT CASE WHEN r.resource_type = 'collection' THEN r.id END) AS collectionCount
         FROM managed_groups g
         LEFT JOIN managed_users u ON u.group_id = g.id
+        LEFT JOIN managed_metadata_profiles m ON m.group_id = g.id
         LEFT JOIN managed_resources r ON r.group_id = g.id
         GROUP BY g.id
         ORDER BY g.name COLLATE NOCASE
-      `).all());
+      `).all()).map((group) => ({ ...group, hasMetadata: Boolean(group.hasMetadata) }));
     },
 
     getGroup,
@@ -426,6 +472,69 @@ export function openDatabase(databasePath) {
         `).run(iso(now), groupId);
         audit('group.reordered', `Reordered resources in ${group.name}`, 'group', groupId, now);
         return getGroup(groupId);
+      });
+    },
+
+    setGroupMetadata(groupId, metadata, now = new Date()) {
+      return transaction(() => {
+        const group = getGroup(groupId);
+        if (!group) return null;
+        const timestamp = iso(now);
+        db.prepare(`
+          INSERT INTO managed_metadata_profiles
+            (group_id, provider, name, manifest_url, canonical_url, created_at, updated_at)
+          VALUES (?, 'aiometadata', ?, ?, ?, ?, ?)
+          ON CONFLICT(group_id) DO UPDATE SET
+            name = excluded.name,
+            manifest_url = excluded.manifest_url,
+            canonical_url = excluded.canonical_url,
+            updated_at = excluded.updated_at
+        `).run(
+          groupId,
+          metadata.name,
+          metadata.manifestUrl,
+          metadata.canonicalUrl,
+          timestamp,
+          timestamp,
+        );
+        db.prepare('UPDATE managed_groups SET updated_at = ? WHERE id = ?').run(timestamp, groupId);
+        db.prepare(`
+          UPDATE managed_users
+          SET policy_revision = policy_revision + 1, updated_at = ?
+          WHERE group_id = ?
+        `).run(timestamp, groupId);
+        audit(
+          'metadata.configured',
+          `Configured AIOmetadata for ${group.name}`,
+          'group',
+          groupId,
+          now,
+        );
+        return getGroup(groupId).metadata;
+      });
+    },
+
+    clearGroupMetadata(groupId, now = new Date()) {
+      return transaction(() => {
+        const group = getGroup(groupId);
+        if (!group) return null;
+        if (!group.metadata) return false;
+        db.prepare('DELETE FROM managed_metadata_profiles WHERE group_id = ?').run(groupId);
+        const timestamp = iso(now);
+        db.prepare('UPDATE managed_groups SET updated_at = ? WHERE id = ?').run(timestamp, groupId);
+        db.prepare(`
+          UPDATE managed_users
+          SET policy_revision = policy_revision + 1, updated_at = ?
+          WHERE group_id = ?
+        `).run(timestamp, groupId);
+        audit(
+          'metadata.removed',
+          `Removed AIOmetadata from ${group.name}`,
+          'group',
+          groupId,
+          now,
+        );
+        return true;
       });
     },
 
@@ -581,6 +690,10 @@ export function openDatabase(databasePath) {
       const collections = resources
         .filter((resource) => resource.type === 'collection')
         .map(({ id, name, collectionJson }) => ({ id, name, json: collectionJson }));
+      const metadata = device.groupId ? db.prepare(`
+        SELECT provider, name, manifest_url AS manifestUrl
+        FROM managed_metadata_profiles WHERE group_id = ?
+      `).get(device.groupId) : null;
       return {
         revoked: false,
         device: { id: device.id, name: device.name },
@@ -590,6 +703,7 @@ export function openDatabase(databasePath) {
           updatedAt: device.policyUpdatedAt,
           addons,
           collections,
+          metadata: metadata ? { ...metadata } : null,
         },
       };
     },
@@ -628,6 +742,94 @@ export function openDatabase(databasePath) {
                target_id AS targetId, created_at AS createdAt
         FROM audit_events ORDER BY created_at DESC LIMIT ?
       `).all(limit));
+    },
+
+    recordPrefetchEvent(deviceId, event, now = new Date(), retentionDays = 14, maximumRows = 5_000) {
+      const device = db.prepare(`
+        SELECT d.id, d.user_id AS userId
+        FROM devices d JOIN managed_users u ON u.id = d.user_id
+        WHERE d.id = ? AND d.revoked_at IS NULL AND u.enabled = 1
+      `).get(deviceId);
+      if (!device) return null;
+      const timestamp = iso(now);
+      db.prepare(`
+        INSERT INTO prefetch_events
+          (id, request_id, device_id, user_id, stage, content_type, video_id,
+           season, episode, addon_count, stream_count, duration_ms, cache_hit,
+           detail, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        randomUUID(),
+        event.requestId,
+        device.id,
+        device.userId,
+        event.stage,
+        event.contentType,
+        event.videoId,
+        event.season ?? null,
+        event.episode ?? null,
+        event.addonCount ?? null,
+        event.streamCount ?? null,
+        event.durationMs ?? null,
+        event.cacheHit == null ? null : (event.cacheHit ? 1 : 0),
+        event.detail ?? null,
+        timestamp,
+      );
+
+      const cutoff = new Date(now.getTime() - retentionDays * 24 * 60 * 60 * 1000);
+      db.prepare('DELETE FROM prefetch_events WHERE created_at < ?').run(iso(cutoff));
+      db.prepare(`
+        DELETE FROM prefetch_events WHERE id IN (
+          SELECT id FROM prefetch_events
+          ORDER BY created_at DESC LIMIT -1 OFFSET ?
+        )
+      `).run(maximumRows);
+      return { acceptedAt: timestamp };
+    },
+
+    prefetchDashboard(now = new Date(), limit = 80) {
+      const since = iso(new Date(now.getTime() - 24 * 60 * 60 * 1000));
+      const summary = db.prepare(`
+        SELECT
+          SUM(CASE WHEN stage = 'started' THEN 1 ELSE 0 END) AS started,
+          SUM(CASE WHEN stage = 'completed' THEN 1 ELSE 0 END) AS completed,
+          SUM(CASE WHEN stage = 'empty' THEN 1 ELSE 0 END) AS empty,
+          SUM(CASE WHEN stage = 'failed' THEN 1 ELSE 0 END) AS failed,
+          SUM(CASE WHEN stage = 'consumed' THEN 1 ELSE 0 END) AS consumed,
+          ROUND(AVG(CASE WHEN stage IN ('completed', 'empty') THEN duration_ms END)) AS averageDurationMs,
+          MAX(created_at) AS lastEventAt
+        FROM prefetch_events WHERE created_at >= ?
+      `).get(since);
+      const recent = rowsToPlain(db.prepare(`
+        SELECT p.id, p.request_id AS requestId, p.stage,
+               p.content_type AS contentType, p.video_id AS videoId,
+               p.season, p.episode, p.addon_count AS addonCount,
+               p.stream_count AS streamCount, p.duration_ms AS durationMs,
+               p.cache_hit AS cacheHit, p.detail, p.created_at AS createdAt,
+               d.name AS deviceName, u.name AS userName
+        FROM prefetch_events p
+        JOIN devices d ON d.id = p.device_id
+        JOIN managed_users u ON u.id = p.user_id
+        ORDER BY p.created_at DESC LIMIT ?
+      `).all(limit)).map((event) => ({
+        ...event,
+        cacheHit: event.cacheHit == null ? null : Boolean(event.cacheHit),
+      }));
+      return {
+        windowHours: 24,
+        summary: {
+          started: Number(summary.started ?? 0),
+          completed: Number(summary.completed ?? 0),
+          empty: Number(summary.empty ?? 0),
+          failed: Number(summary.failed ?? 0),
+          consumed: Number(summary.consumed ?? 0),
+          averageDurationMs: summary.averageDurationMs == null
+            ? null
+            : Number(summary.averageDurationMs),
+          lastEventAt: summary.lastEventAt ?? null,
+        },
+        recent,
+      };
     },
 
     countPendingPairings(now = new Date()) {

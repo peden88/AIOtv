@@ -6,6 +6,16 @@ import com.nuvio.tv.domain.model.AddonStreams
 import com.nuvio.tv.domain.model.Stream
 import kotlinx.coroutines.flow.Flow
 
+data class StreamPrefetchResult(
+    val requestId: String,
+    val status: String,
+    val addonCount: Int,
+    val streamCount: Int,
+    val durationMs: Long,
+    val cacheHit: Boolean,
+    val detail: String? = null
+)
+
 interface StreamRepository {
     /** Suspends local plugin work while playback owns the device, then resumes the same search. */
     fun setLocalPluginSearchPaused(paused: Boolean)
@@ -36,7 +46,7 @@ interface StreamRepository {
         videoId: String,
         season: Int? = null,
         episode: Int? = null
-    )
+    ): StreamPrefetchResult
 
     /**
      * Fetches streams from a specific addon.

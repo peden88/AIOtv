@@ -14,6 +14,7 @@ import com.nuvio.tv.core.tmdb.TmdbService
 import com.nuvio.tv.data.local.DebridSettingsDataStore
 import com.nuvio.tv.data.mapper.toDomain
 import com.nuvio.tv.data.remote.api.AddonApi
+import com.nuvio.tv.data.remote.dto.AioTvPrefetchEventRequest
 import com.nuvio.tv.domain.model.Addon
 import com.nuvio.tv.domain.model.AddonStreams
 import com.nuvio.tv.domain.model.DebridSettings
@@ -26,6 +27,7 @@ import com.nuvio.tv.domain.model.StreamBehaviorHints
 import com.nuvio.tv.domain.model.enabledAddons
 import com.nuvio.tv.domain.repository.AddonRepository
 import com.nuvio.tv.domain.repository.StreamRepository
+import com.nuvio.tv.domain.repository.StreamPrefetchResult
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
@@ -40,6 +42,7 @@ import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.launch
 import java.net.URLEncoder
 import java.security.MessageDigest
+import java.util.UUID
 import javax.inject.Inject
 
 private const val TAG = "StreamRepositoryImpl"
@@ -53,9 +56,35 @@ class StreamRepositoryImpl @Inject constructor(
     private val debridSettingsDataStore: DebridSettingsDataStore,
     private val tmdbService: TmdbService,
     private val debridStreamPresentation: DebridStreamPresentation,
-    private val localDebridAvailabilityService: LocalDebridAvailabilityService
+    private val localDebridAvailabilityService: LocalDebridAvailabilityService,
+    private val prefetchTelemetryReporter: PrefetchTelemetryReporter? = null
 ) : StreamRepository {
-    private val streamSearchSessions = StreamSearchSessionCache()
+    private val streamSearchSessions = StreamSearchSessionCache(
+        onPrefetchStarted = { key, requestId, cacheHit ->
+            reportPrefetchEvent(
+                key = key,
+                requestId = requestId,
+                stage = "started",
+                cacheHit = cacheHit
+            )
+        },
+        onPrefetchConsumed = { key, consumption ->
+            reportPrefetchEvent(
+                key = key,
+                requestId = consumption.requestId,
+                stage = "consumed",
+                addonCount = consumption.addonCount,
+                streamCount = consumption.streamCount,
+                durationMs = consumption.ageMs,
+                cacheHit = true,
+                detail = if (consumption.ready) {
+                    "Playback reused completed prefetched results"
+                } else {
+                    "Playback joined the in-flight prefetch"
+                }
+            )
+        }
+    )
     private val localPluginSearchPaused = MutableStateFlow(false)
 
     override fun setLocalPluginSearchPaused(paused: Boolean) {
@@ -133,7 +162,7 @@ class StreamRepositoryImpl @Inject constructor(
         videoId: String,
         season: Int?,
         episode: Int?
-    ) {
+    ): StreamPrefetchResult {
         val sourceConfiguration = captureSourceConfiguration()
         val requestKey = StreamSearchRequestKey(
             profileId = sourceConfiguration.profileId,
@@ -153,7 +182,10 @@ class StreamRepositoryImpl @Inject constructor(
             )
         )
 
-        streamSearchSessions.prefetch(requestKey) {
+        val result = streamSearchSessions.prefetch(
+            key = requestKey,
+            requestId = UUID.randomUUID().toString()
+        ) {
             fetchStreamsFromAllSources(
                 type = type,
                 videoId = videoId,
@@ -166,6 +198,57 @@ class StreamRepositoryImpl @Inject constructor(
                 hasCompatiblePlugins = false
             )
         }
+        val status = when {
+            result.streamCount > 0 -> "completed"
+            result.errorMessage != null -> "failed"
+            else -> "empty"
+        }
+        reportPrefetchEvent(
+            key = requestKey,
+            requestId = result.requestId,
+            stage = status,
+            addonCount = result.addonCount,
+            streamCount = result.streamCount,
+            durationMs = result.durationMs,
+            cacheHit = result.cacheHit,
+            detail = result.errorMessage
+        )
+        return StreamPrefetchResult(
+            requestId = result.requestId,
+            status = status,
+            addonCount = result.addonCount,
+            streamCount = result.streamCount,
+            durationMs = result.durationMs,
+            cacheHit = result.cacheHit,
+            detail = result.errorMessage
+        )
+    }
+
+    private fun reportPrefetchEvent(
+        key: StreamSearchRequestKey,
+        requestId: String,
+        stage: String,
+        addonCount: Int? = null,
+        streamCount: Int? = null,
+        durationMs: Long? = null,
+        cacheHit: Boolean? = null,
+        detail: String? = null
+    ) {
+        prefetchTelemetryReporter?.report(
+            AioTvPrefetchEventRequest(
+                requestId = requestId,
+                stage = stage,
+                contentType = key.type,
+                videoId = key.videoId,
+                season = key.season,
+                episode = key.episode,
+                addonCount = addonCount,
+                streamCount = streamCount,
+                durationMs = durationMs,
+                cacheHit = cacheHit,
+                detail = detail?.take(240)
+            )
+        )
     }
 
     private suspend fun captureSourceConfiguration(): StreamSourceConfigurationSnapshot {

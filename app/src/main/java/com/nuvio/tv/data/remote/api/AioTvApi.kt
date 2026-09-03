@@ -5,6 +5,7 @@ import com.nuvio.tv.data.remote.dto.AioTvBootstrapData
 import com.nuvio.tv.data.remote.dto.AioTvDeviceStartData
 import com.nuvio.tv.data.remote.dto.AioTvDeviceTokenData
 import com.nuvio.tv.data.remote.dto.AioTvDeviceTokenRequest
+import com.nuvio.tv.data.remote.dto.AioTvPrefetchEventRequest
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.GET
@@ -31,4 +32,11 @@ interface AioTvApi {
         @Header("Authorization") authorization: String,
         @Header("If-None-Match") etag: String? = null
     ): Response<AioTvApiEnvelope<AioTvBootstrapData>>
+
+    @POST
+    suspend fun reportPrefetchEvent(
+        @Url url: String,
+        @Header("Authorization") authorization: String,
+        @Body body: AioTvPrefetchEventRequest
+    ): Response<AioTvApiEnvelope<Map<String, String>>>
 }

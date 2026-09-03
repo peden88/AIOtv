@@ -22,6 +22,9 @@ import { openDatabase } from './database.mjs';
 const COOKIE_NAME = 'aiotv_admin';
 const MAX_BODY_BYTES = 10 * 1024 * 1024;
 const MAX_COLLECTION_BYTES = 10_000_000;
+const MAX_METADATA_RESPONSE_BYTES = 10 * 1024 * 1024;
+const METADATA_PROXY_PREFIX = '/api/v1/metadata/';
+const PREFETCH_STAGES = new Set(['started', 'completed', 'empty', 'failed', 'consumed']);
 
 function cleanText(value, maximum = 100) {
   return String(value ?? '').trim().replace(/\s+/g, ' ').slice(0, maximum);
@@ -64,20 +67,21 @@ function isPrivateAddress(address) {
   return true;
 }
 
-async function assertPublicHost(hostname) {
+async function assertPublicHost(hostname, allowedHosts = new Set()) {
+  if (allowedHosts.has(hostname.toLowerCase())) return;
   const addresses = await dns.lookup(hostname, { all: true });
   if (!addresses.length || addresses.some(({ address }) => isPrivateAddress(address))) {
     throw Object.assign(new Error('The addon host does not resolve to a public address'), { statusCode: 400 });
   }
 }
 
-async function inspectManifest(manifestUrl, allowHttp) {
+async function inspectManifest(manifestUrl, allowHttp, allowedHosts = new Set()) {
   let current = new URL(manifestUrl);
   for (let redirect = 0; redirect < 4; redirect += 1) {
     if (current.protocol !== 'https:' && !(allowHttp && current.protocol === 'http:')) {
       throw Object.assign(new Error('Addon manifest redirects must use HTTPS'), { statusCode: 400 });
     }
-    await assertPublicHost(current.hostname);
+    await assertPublicHost(current.hostname, allowedHosts);
     const response = await fetch(current, {
       redirect: 'manual',
       signal: AbortSignal.timeout(8_000),
@@ -108,9 +112,152 @@ async function inspectManifest(manifestUrl, allowHttp) {
     }
     const name = cleanText(manifest.name, 120);
     if (!name) throw Object.assign(new Error('Addon manifest has no name'), { statusCode: 400 });
-    return { name, manifestUrl: current.toString() };
+    return { name, manifestUrl: current.toString(), manifest };
   }
   throw Object.assign(new Error('Addon manifest redirected too many times'), { statusCode: 400 });
+}
+
+function manifestSupportsResource(manifest, resourceName) {
+  return Array.isArray(manifest?.resources) && manifest.resources.some((resource) => {
+    if (typeof resource === 'string') return resource === resourceName;
+    return resource && typeof resource === 'object' && resource.name === resourceName;
+  });
+}
+
+function metadataTargetUrl(manifestUrl, relativePath, incomingSearch) {
+  if (!relativePath || relativePath.startsWith('/') || relativePath.includes('\\')) {
+    throw Object.assign(new Error('Invalid metadata resource path'), { statusCode: 400 });
+  }
+  let decodedPath;
+  try {
+    decodedPath = decodeURIComponent(relativePath);
+  } catch {
+    throw Object.assign(new Error('Invalid metadata resource path'), { statusCode: 400 });
+  }
+  const segments = decodedPath.split('/');
+  const permittedResource = decodedPath === 'manifest.json' ||
+    segments[0] === 'catalog' || segments[0] === 'meta';
+  if (decodedPath.includes('\\') ||
+      segments.some((part) => part === '..' || part === '.') ||
+      !permittedResource) {
+    throw Object.assign(new Error('Invalid metadata resource path'), { statusCode: 400 });
+  }
+
+  const manifest = new URL(manifestUrl);
+  const directoryPath = manifest.pathname.replace(/manifest\.json$/i, '');
+  const base = new URL(manifest.toString());
+  base.pathname = directoryPath.endsWith('/') ? directoryPath : `${directoryPath}/`;
+  base.search = '';
+  base.hash = '';
+  const target = new URL(relativePath, base);
+  if (target.origin !== base.origin || !target.pathname.startsWith(base.pathname)) {
+    throw Object.assign(new Error('Invalid metadata resource path'), { statusCode: 400 });
+  }
+
+  const originalParameters = new URLSearchParams(manifest.search);
+  const requestParameters = new URLSearchParams(incomingSearch);
+  for (const [key, value] of requestParameters) originalParameters.append(key, value);
+  target.search = originalParameters.toString();
+  return target;
+}
+
+async function readLimitedResponse(response, maximumBytes = MAX_METADATA_RESPONSE_BYTES) {
+  const declaredLength = Number(response.headers.get('content-length') ?? 0);
+  if (declaredLength > maximumBytes) {
+    throw Object.assign(new Error('Metadata response is too large'), { statusCode: 502 });
+  }
+  if (!response.body) return Buffer.alloc(0);
+  const reader = response.body.getReader();
+  const chunks = [];
+  let size = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > maximumBytes) {
+      await reader.cancel();
+      throw Object.assign(new Error('Metadata response is too large'), { statusCode: 502 });
+    }
+    chunks.push(Buffer.from(value));
+  }
+  return Buffer.concat(chunks, size);
+}
+
+async function fetchMetadataResource(target, config) {
+  let current = target;
+  for (let redirect = 0; redirect < 4; redirect += 1) {
+    if (current.protocol !== 'https:' && !(config.allowHttpAddons && current.protocol === 'http:')) {
+      throw Object.assign(new Error('AIOmetadata proxy requires HTTPS'), { statusCode: 502 });
+    }
+    await assertPublicHost(current.hostname, config.metadataAllowedHosts);
+    const upstream = await fetch(current, {
+      redirect: 'manual',
+      signal: AbortSignal.timeout(config.metadataProxyTimeoutMs),
+      headers: {
+        Accept: 'application/json',
+        'Accept-Language': 'en-GB,en;q=0.8',
+        'User-Agent': 'AIOtv-Control/0.2 metadata-proxy',
+      },
+    });
+    if ([301, 302, 303, 307, 308].includes(upstream.status)) {
+      const location = upstream.headers.get('location');
+      if (!location) throw Object.assign(new Error('AIOmetadata returned an invalid redirect'), { statusCode: 502 });
+      current = new URL(location, current);
+      continue;
+    }
+    return { response: upstream, body: await readLimitedResponse(upstream) };
+  }
+  throw Object.assign(new Error('AIOmetadata redirected too many times'), { statusCode: 502 });
+}
+
+function sendMetadataResponse(response, upstream, body) {
+  const headers = {
+    'Content-Type': upstream.headers.get('content-type') || 'application/json; charset=utf-8',
+    'Content-Length': body.length,
+    'Cache-Control': upstream.headers.get('cache-control') || 'no-cache',
+    'X-AIOtv-Metadata-Proxy': 'aiometadata',
+  };
+  for (const name of ['etag', 'last-modified', 'vary']) {
+    const value = upstream.headers.get(name);
+    if (value) headers[name] = value;
+  }
+  response.writeHead(upstream.status, headers);
+  response.end(body);
+}
+
+function optionalInteger(value, minimum, maximum) {
+  if (value == null || value === '') return null;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < minimum || parsed > maximum) {
+    throw Object.assign(new Error('Prefetch telemetry contains an invalid number'), { statusCode: 400 });
+  }
+  return parsed;
+}
+
+function inspectPrefetchEvent(body) {
+  const requestId = cleanText(body.requestId, 100);
+  const stage = cleanText(body.stage, 20).toLowerCase();
+  const contentType = cleanText(body.contentType, 30).toLowerCase();
+  const videoId = cleanText(body.videoId, 240);
+  if (!requestId || !PREFETCH_STAGES.has(stage) || !contentType || !videoId) {
+    throw Object.assign(new Error('Prefetch telemetry is incomplete or invalid'), { statusCode: 400 });
+  }
+  if (body.cacheHit != null && typeof body.cacheHit !== 'boolean') {
+    throw Object.assign(new Error('Prefetch telemetry contains an invalid cache-hit flag'), { statusCode: 400 });
+  }
+  return {
+    requestId,
+    stage,
+    contentType,
+    videoId,
+    season: optionalInteger(body.season, 0, 10_000),
+    episode: optionalInteger(body.episode, 0, 100_000),
+    addonCount: optionalInteger(body.addonCount, 0, 10_000),
+    streamCount: optionalInteger(body.streamCount, 0, 1_000_000),
+    durationMs: optionalInteger(body.durationMs, 0, 3_600_000),
+    cacheHit: body.cacheHit ?? null,
+    detail: cleanText(body.detail, 240) || null,
+  };
 }
 
 function inspectCollectionJson(value) {
@@ -335,15 +482,89 @@ export function createControlServer(overrides = {}) {
           response.writeHead(304, { ETag: etag, 'Cache-Control': 'no-cache' });
           return response.end();
         }
+        const managedMetadata = bootstrap.policy.metadata
+          ? {
+              provider: 'aiometadata',
+              name: bootstrap.policy.metadata.name,
+              manifestUrl: `${config.publicUrl}${METADATA_PROXY_PREFIX}manifest.json`,
+            }
+          : null;
         return success(response, {
           device: bootstrap.device,
           profile: bootstrap.profile,
-          policy: bootstrap.policy,
+          policy: { ...bootstrap.policy, metadata: managedMetadata },
           management: {
             addonMembership: 'administrator',
             catalogOrder: 'administrator',
+            metadataProvider: 'administrator',
           },
         }, 200, { ETag: etag });
+      }
+
+      if (method === 'POST' && pathname === '/api/v1/device/prefetch-events') {
+        const token = bearerToken(request);
+        if (!token) return failure(response, 401, 'missing_token', 'Device token is required');
+        const bootstrap = database.getBootstrap(sha256(token), now);
+        if (!bootstrap) return failure(response, 401, 'invalid_token', 'Device token is invalid');
+        if (bootstrap.revoked) return failure(response, 403, 'device_revoked', 'This TV is no longer authorised');
+        let event;
+        try {
+          event = inspectPrefetchEvent(await readJson(request));
+        } catch (error) {
+          return failure(response, error.statusCode ?? 400, 'invalid_prefetch_event', error.message);
+        }
+        const accepted = database.recordPrefetchEvent(
+          bootstrap.device.id,
+          event,
+          now,
+          config.prefetchEventRetentionDays,
+          config.prefetchEventMaximumRows,
+        );
+        if (!accepted) return failure(response, 403, 'device_revoked', 'This TV is no longer authorised');
+        console.info(JSON.stringify({
+          level: 'info',
+          event: 'prefetch.telemetry',
+          deviceId: bootstrap.device.id,
+          userId: bootstrap.profile.id,
+          ...event,
+          at: accepted.acceptedAt,
+        }));
+        return success(response, accepted, 202);
+      }
+
+      if ((method === 'GET' || method === 'HEAD') && pathname.startsWith(METADATA_PROXY_PREFIX)) {
+        const token = bearerToken(request);
+        if (!token) return failure(response, 401, 'missing_token', 'Device token is required');
+        const bootstrap = database.getBootstrap(sha256(token), now);
+        if (!bootstrap) return failure(response, 401, 'invalid_token', 'Device token is invalid');
+        if (bootstrap.revoked) return failure(response, 403, 'device_revoked', 'This TV is no longer authorised');
+        const metadata = bootstrap.policy.metadata;
+        if (!metadata) {
+          return failure(response, 404, 'metadata_not_configured', 'AIOmetadata is not configured for this user');
+        }
+        const relativePath = pathname.slice(METADATA_PROXY_PREFIX.length);
+        const target = metadataTargetUrl(metadata.manifestUrl, relativePath, url.search);
+        const startedAt = Date.now();
+        const proxied = await fetchMetadataResource(target, config);
+        console.info(JSON.stringify({
+          level: 'info',
+          event: 'metadata.proxy',
+          deviceId: bootstrap.device.id,
+          resource: relativePath.split('/', 1)[0] || 'unknown',
+          status: proxied.response.status,
+          durationMs: Date.now() - startedAt,
+          bytes: proxied.body.length,
+        }));
+        if (method === 'HEAD') {
+          response.writeHead(proxied.response.status, {
+            'Content-Type': proxied.response.headers.get('content-type') || 'application/json; charset=utf-8',
+            'Content-Length': proxied.body.length,
+            'Cache-Control': proxied.response.headers.get('cache-control') || 'no-cache',
+            'X-AIOtv-Metadata-Proxy': 'aiometadata',
+          });
+          return response.end();
+        }
+        return sendMetadataResponse(response, proxied.response, proxied.body);
       }
 
       if (method === 'POST' && pathname === '/api/admin/login') {
@@ -400,7 +621,13 @@ export function createControlServer(overrides = {}) {
           groups: database.listGroups(),
           pendingPairingCount: database.countPendingPairings(now),
           recentActivity: database.recentAudit(),
+          prefetch: database.prefetchDashboard(now),
         });
+      }
+
+      if (method === 'GET' && pathname === '/api/admin/prefetch') {
+        const limit = Math.min(200, Math.max(1, Number.parseInt(url.searchParams.get('limit') ?? '80', 10) || 80));
+        return success(response, database.prefetchDashboard(now, limit));
       }
 
       if (method === 'POST' && pathname === '/api/admin/users') {
@@ -522,6 +749,43 @@ export function createControlServer(overrides = {}) {
           }
           throw error;
         }
+      }
+
+      const groupMetadataMatch = /^\/api\/admin\/groups\/([0-9a-f-]+)\/metadata$/i.exec(pathname);
+      if (groupMetadataMatch && method === 'PUT') {
+        const body = await readJson(request);
+        let parsed;
+        let inspected;
+        try {
+          parsed = canonicalizeManifestUrl(body.manifestUrl, config.allowHttpAddons);
+          inspected = await inspectManifest(
+            parsed.manifestUrl,
+            config.allowHttpAddons,
+            config.metadataAllowedHosts,
+          );
+          if (!manifestSupportsResource(inspected.manifest, 'catalog') ||
+              !manifestSupportsResource(inspected.manifest, 'meta')) {
+            throw Object.assign(
+              new Error('The AIOmetadata manifest must expose both catalog and meta resources'),
+              { statusCode: 400 },
+            );
+          }
+          parsed = canonicalizeManifestUrl(inspected.manifestUrl, config.allowHttpAddons);
+        } catch (error) {
+          return failure(response, error.statusCode ?? 400, 'metadata_manifest_unavailable', error.message);
+        }
+        const metadata = database.setGroupMetadata(groupMetadataMatch[1], {
+          name: cleanText(body.name, 120) || inspected.name || 'AIOmetadata',
+          ...parsed,
+        }, now);
+        return metadata
+          ? success(response, metadata)
+          : failure(response, 404, 'group_not_found', 'Addon group was not found');
+      }
+      if (groupMetadataMatch && method === 'DELETE') {
+        const removed = database.clearGroupMetadata(groupMetadataMatch[1], now);
+        if (removed === null) return failure(response, 404, 'group_not_found', 'Addon group was not found');
+        return success(response, { removed: Boolean(removed) });
       }
 
       const groupCollectionsMatch = /^\/api\/admin\/groups\/([0-9a-f-]+)\/collections$/i.exec(pathname);

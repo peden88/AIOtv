@@ -14,6 +14,15 @@ function asInteger(value, fallback, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, parsed));
 }
 
+function asHostSet(value) {
+  return new Set(
+    String(value ?? '')
+      .split(',')
+      .map((host) => host.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
 export function loadConfig(env = process.env, overrides = {}) {
   const publicUrl = String(overrides.publicUrl ?? env.AIOTV_PUBLIC_URL ?? 'http://localhost:3000').replace(/\/$/, '');
   const config = {
@@ -27,6 +36,25 @@ export function loadConfig(env = process.env, overrides = {}) {
     sessionSecret: overrides.sessionSecret ?? env.AIOTV_SESSION_SECRET ?? '',
     cookieSecure: overrides.cookieSecure ?? asBoolean(env.AIOTV_COOKIE_SECURE, publicUrl.startsWith('https://')),
     allowHttpAddons: overrides.allowHttpAddons ?? asBoolean(env.AIOTV_ALLOW_HTTP_ADDONS, false),
+    metadataAllowedHosts: overrides.metadataAllowedHosts ?? asHostSet(env.AIOTV_METADATA_ALLOWED_HOSTS),
+    metadataProxyTimeoutMs: overrides.metadataProxyTimeoutMs ?? asInteger(
+      env.AIOTV_METADATA_PROXY_TIMEOUT_MS,
+      15_000,
+      2_000,
+      60_000,
+    ),
+    prefetchEventRetentionDays: overrides.prefetchEventRetentionDays ?? asInteger(
+      env.AIOTV_PREFETCH_EVENT_RETENTION_DAYS,
+      14,
+      1,
+      90,
+    ),
+    prefetchEventMaximumRows: overrides.prefetchEventMaximumRows ?? asInteger(
+      env.AIOTV_PREFETCH_EVENT_MAX_ROWS,
+      5_000,
+      100,
+      100_000,
+    ),
     pairingTtlSeconds: overrides.pairingTtlSeconds ?? asInteger(env.AIOTV_PAIRING_TTL_SECONDS, 900, 120, 3600),
     pairingPollSeconds: overrides.pairingPollSeconds ?? asInteger(env.AIOTV_PAIRING_POLL_SECONDS, 3, 2, 30),
     adminSessionSeconds: overrides.adminSessionSeconds ?? asInteger(env.AIOTV_ADMIN_SESSION_SECONDS, 43200, 900, 604800),

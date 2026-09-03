@@ -3,6 +3,9 @@ package com.nuvio.tv.core.di
 import android.content.Context
 import android.util.Log
 import com.nuvio.tv.BuildConfig
+import com.nuvio.tv.core.aio.AioTvManagedRequestPolicy
+import com.nuvio.tv.core.aio.AioTvServerConfig
+import com.nuvio.tv.data.local.AioTvAuthStore
 import com.nuvio.tv.data.remote.api.AddonApi
 import com.nuvio.tv.data.remote.api.AniSkipApi
 import com.nuvio.tv.data.remote.api.AnimeSkipApi
@@ -99,7 +102,10 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(@ApplicationContext context: Context): OkHttpClient {
+    fun provideOkHttpClient(
+        @ApplicationContext context: Context,
+        aioTvAuthStore: AioTvAuthStore
+    ): OkHttpClient {
         val trustAllManager = object : X509TrustManager {
             override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) = Unit
             override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) = Unit
@@ -117,11 +123,21 @@ object NetworkModule {
             .readTimeout(60, TimeUnit.SECONDS)
             .addInterceptor { chain ->
                 val version = BuildConfig.VERSION_NAME.ifBlank { "dev" }
-                val request = chain.request().newBuilder()
+                val original = chain.request()
+                val requestBuilder = original.newBuilder()
                     .header("User-Agent", "Nuvio/$version")
                     .header("Accept-Language", buildAcceptLanguageHeader())
-                    .build()
-                chain.proceed(request)
+                if (original.header("Authorization") == null &&
+                    AioTvManagedRequestPolicy.isMetadataProxyRequest(
+                        requestUrl = original.url,
+                        controlBaseUrl = AioTvServerConfig.BASE_URL
+                    )
+                ) {
+                    aioTvAuthStore.load()?.accessToken?.takeIf { it.isNotBlank() }?.let { token ->
+                        requestBuilder.header("Authorization", "Bearer $token")
+                    }
+                }
+                chain.proceed(requestBuilder.build())
             }
             .addInterceptor(SentryNetworkBreadcrumbInterceptor())
             // Prevent OkHttp from caching error responses (4xx/5xx).
