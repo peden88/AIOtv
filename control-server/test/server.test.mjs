@@ -12,6 +12,35 @@ async function read(response) {
   return { response, payload };
 }
 
+test('administrator passwords may contain a single character', async (t) => {
+  const tempDir = mkdtempSync(path.join(os.tmpdir(), 'aiotv-control-test-'));
+  const app = createControlServer({
+    host: '127.0.0.1',
+    port: 0,
+    publicUrl: 'http://127.0.0.1',
+    databasePath: path.join(tempDir, 'test.sqlite'),
+    adminPassword: 'x',
+    sessionSecret: 'short-password-test-secret-more-than-32-characters',
+    cookieSecure: false,
+  });
+  t.after(async () => {
+    await app.close();
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  const address = await app.listen();
+  const base = `http://127.0.0.1:${address.port}`;
+  const home = await fetch(`${base}/`);
+  assert.doesNotMatch(await home.text(), /minlength=["']12["']/);
+
+  const login = await read(await fetch(`${base}/api/admin/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ password: 'x' }),
+  }));
+  assert.equal(login.response.status, 200);
+});
+
 test('administrator can create a profile and pair, bootstrap, then revoke a TV', async (t) => {
   const tempDir = mkdtempSync(path.join(os.tmpdir(), 'aiotv-control-test-'));
   const app = createControlServer({

@@ -36,9 +36,6 @@ export function loadConfig(env = process.env, overrides = {}) {
   if (!config.adminPassword && !config.adminPasswordHash) {
     throw new Error('Set AIOTV_ADMIN_PASSWORD_HASH (recommended) or AIOTV_ADMIN_PASSWORD');
   }
-  if (config.adminPassword && config.adminPassword.length < 12) {
-    throw new Error('AIOTV_ADMIN_PASSWORD must contain at least 12 characters');
-  }
   if (config.sessionSecret.length < 32) {
     throw new Error('AIOTV_SESSION_SECRET must contain at least 32 characters');
   }

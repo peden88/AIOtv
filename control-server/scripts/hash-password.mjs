@@ -9,8 +9,8 @@ async function readStdin() {
 const password = process.argv[2] === '--stdin'
   ? await readStdin()
   : process.argv[2];
-if (!password || password.length < 12) {
-  console.error('Usage: npm run hash-password -- "a password of at least 12 characters"');
+if (!password) {
+  console.error('Usage: npm run hash-password -- "a non-empty password"');
   console.error('   or: printf %s "$PASSWORD" | npm run hash-password -- --stdin');
   process.exit(1);
 }
