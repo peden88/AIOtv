@@ -29,7 +29,7 @@ test('busy forms keep successful controls available to FormData', () => {
   const end = script.indexOf('\n}', start) + 2;
   const setBusy = script.slice(start, end);
 
-  assert.match(setBusy, /\$\$\(['"]button['"], form\)/);
+  assert.match(setBusy, /form\.querySelectorAll\(['\"]button['\"]\)/);
   assert.doesNotMatch(setBusy, /button, input|input, select|querySelectorAll\([^)]*input/);
 });
 
